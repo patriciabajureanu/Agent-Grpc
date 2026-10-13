@@ -1,0 +1,15 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Fisiere generate la compilare
+bin/
+obj/
+
+# Fisiere temporare
+*.tmp
+*.log
+
+# Informatii confidentiale
+.env
