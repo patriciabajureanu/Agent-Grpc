@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using Broker.Services;
+using Broker.Services.Interfaces;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,6 +12,8 @@ namespace Broker
           public void ConfigureServices(IServiceCollection services)
           {
                services.AddGrpc();
+
+               services.AddSingleton<IMessageStorageService, MessageStorageService>();
           }
 
           public void Configure(
@@ -25,7 +29,7 @@ namespace Broker
 
                app.UseEndpoints(endpoints =>
                {
-                    endpoints.MapGrpcService<Services.GreeterService>();
+                    endpoints.MapGrpcService<Services.PublisherService>();
                });
           }
      }
