@@ -1,5 +1,6 @@
 using Broker;
 using Grpc.Core;
+using GrpcAgent;
 
 namespace Broker.Services
 {

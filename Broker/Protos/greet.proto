@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-option csharp_namespace = "Broker";
+option csharp_namespace = "GrpcAgent";
 
-package greet;
+package GrpcAgent;
 
 // The greeting service definition.
 service Greeter {
