@@ -14,6 +14,7 @@ namespace Broker
                services.AddGrpc();
 
                services.AddSingleton<IMessageStorageService, MessageStorageService>();
+               services.AddSingleton<IConnectionStorageService, ConnectionStorageService>();
           }
 
           public void Configure(
@@ -30,6 +31,8 @@ namespace Broker
                app.UseEndpoints(endpoints =>
                {
                     endpoints.MapGrpcService<Services.PublisherService>();
+                    endpoints.MapGrpcService<Services.SubscriberService>();
+
                });
           }
      }

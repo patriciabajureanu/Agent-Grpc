@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <None Remove="Protos\publish.proto" />
+    <None Remove="Protos\subscribe.proto" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +22,7 @@
 
   <ItemGroup>
     <Protobuf Include="Protos\publish.proto" />
+    <Protobuf Include="Protos\subscribe.proto" />
   </ItemGroup>
 
 </Project>
