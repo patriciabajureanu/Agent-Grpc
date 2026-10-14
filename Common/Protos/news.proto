@@ -16,3 +16,8 @@ message News {
   // true = stirea este salvata pe disc si supravietuieste repornirii Broker-ului.
   bool is_persistent = 6;
 }
+
+// Formatul fisierului de backup al Broker-ului.
+message NewsBackup {
+  repeated News items = 1;
+}

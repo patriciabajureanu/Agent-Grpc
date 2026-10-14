@@ -6,7 +6,7 @@ namespace Broker.Services
 {
      public class MessageStorageService : IMessageStorageService
      {
-          // Coada da ordinea de livrare; dictionarul tine tot ce nu a fost livrat inca, inclusiv stirile scoase din coada.
+          // Coada da ordinea de livrare; dictionarul tine tot ce nu a fost consumat, ca backup-ul sa nu piarda stirile scoase din coada.
           private readonly ConcurrentQueue<News> _queue;
           private readonly ConcurrentDictionary<string, News> _unconsumed;
 
@@ -32,6 +32,11 @@ namespace Broker.Services
           public void MarkConsumed(string id)
           {
                _unconsumed.TryRemove(id, out _);
+          }
+
+          public IList<News> GetUnconsumedPersistent()
+          {
+               return _unconsumed.Values.Where(x => x.IsPersistent).ToList();
           }
      }
 }

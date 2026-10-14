@@ -9,8 +9,11 @@ namespace Broker.Services.Interfaces
 
           News? GetNext();
 
-          // Stirea a fost livrata: nu mai este pastrata.
+          // Stirea a fost livrata: nu mai este pastrata si nu mai intra in backup.
           void MarkConsumed(string id);
+
+          // Stirile persistente care nu au fost inca livrate (inclusiv cele aflate in curs de livrare).
+          IList<News> GetUnconsumedPersistent();
 
      }
 }

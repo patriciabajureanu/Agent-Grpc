@@ -15,6 +15,8 @@ namespace Broker
 
                services.AddSingleton<IMessageStorageService, MessageStorageService>();
                services.AddSingleton<IConnectionStorageService, ConnectionStorageService>();
+               // PersistenceWorker este inregistrat primul: restaureaza backup-ul inainte de livrare si se opreste ultimul (backup final).
+               services.AddHostedService<PersistenceWorker>();
                services.AddHostedService<SenderWorker>();
           }
 
