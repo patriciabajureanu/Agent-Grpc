@@ -15,6 +15,7 @@ namespace Broker
 
                services.AddSingleton<IMessageStorageService, MessageStorageService>();
                services.AddSingleton<IConnectionStorageService, ConnectionStorageService>();
+               services.AddHostedService<SenderWorker>();
           }
 
           public void Configure(

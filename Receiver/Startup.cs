@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Receiver.Services;
 
 namespace Broker
 {
@@ -27,7 +28,7 @@ namespace Broker
 
                app.UseEndpoints(endpoints =>
                {
-                    //endpoints.MapGrpcService<Services.PublisherService>();
+                    endpoints.MapGrpcService<NotificationService>();
                });
           }
      }
