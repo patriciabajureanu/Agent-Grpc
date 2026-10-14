@@ -1,11 +1,12 @@
-
 using Common;
 using Grpc.Net.Client;
 using GrpcAgent;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Receiver.Services;
 
 namespace Receiver
 {
@@ -13,6 +14,20 @@ namespace Receiver
      {
           public static void Main(string[] args)
           {
+               Console.Write("Enter the news category (e.g. sport, tech): ");
+               var category = Console.ReadLine()?.Trim().ToLowerInvariant();
+
+               if (string.IsNullOrWhiteSpace(category))
+               {
+                    Console.WriteLine("Invalid category.");
+                    return;
+               }
+
+               // Jurnalul ramane pe disc intre reporniri, ca o stire deja procesata sa nu fie procesata a doua oara.
+               var journal = new NewsJournal(Environment.GetEnvironmentVariable("RECEIVER_JOURNAL")
+                    ?? $"received-{category}.jsonl");
+               Console.WriteLine($"Journal: {journal.Path} ({journal.Count} news already processed)");
+
                using var host = WebHost.CreateDefaultBuilder(args)
                    .ConfigureLogging(logging =>
                    {
@@ -21,20 +36,21 @@ namespace Receiver
                         logging.SetMinimumLevel(LogLevel.Information);
                         logging.AddFilter("Microsoft.AspNetCore", LogLevel.Information);
                    })
+                   .ConfigureServices(services => services.AddSingleton(journal))
                    .UseStartup<Startup>()
                    .UseUrls(EndpointsConstants.SubscribersAddress)
                    .Build();
 
                host.Start();
 
-               Subscribe(host);
+               Subscribe(host, category);
 
                Console.WriteLine("Press enter to exit");
                Console.ReadLine();
                host.StopAsync().GetAwaiter().GetResult();
           }
 
-          private static void Subscribe(IWebHost host)
+          private static void Subscribe(IWebHost host, string category)
           {
                using var channel = GrpcChannel.ForAddress(
                    EndpointsConstants.BrokerAddress);
@@ -50,15 +66,6 @@ namespace Receiver
                address = address.Replace("127.0.0.1", "localhost");
 
                Console.WriteLine($"Subscriber listening at: {address}");
-
-               Console.Write("Enter the news category (e.g. sport, tech): ");
-               var category = Console.ReadLine()?.Trim().ToLowerInvariant();
-
-               if (string.IsNullOrWhiteSpace(category))
-               {
-                    Console.WriteLine("Invalid category.");
-                    return;
-               }
 
                var request = new SubscribeRequest()
                {

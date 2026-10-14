@@ -15,3 +15,5 @@ obj/
 .env
 # Backup-ul local al stirilor persistente din Broker
 news-backup.json*
+dead-letter.jsonl
+received-*.jsonl

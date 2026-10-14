@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcAgent";
+
+package agent.v1;
+
+import "Protos/news.proto";
+import "google/protobuf/timestamp.proto";
+
+// Formatele interne ale fisierelor Broker-ului; nu sunt trimise prin retea.
+
+// Numarul de incercari este salvat ca limita de reincercari sa ramana valabila si dupa repornire.
+message BackupEntry {
+  News news = 1;
+  int32 attempts = 2;
+}
+
+message NewsBackup {
+  repeated BackupEntry items = 1;
+}
+
+// O linie din fisierul dead-letter.
+message DeadLetterEntry {
+  News news = 1;
+  string reason = 2;
+  int32 attempts = 3;
+  google.protobuf.Timestamp dead_lettered_at = 4;
+}

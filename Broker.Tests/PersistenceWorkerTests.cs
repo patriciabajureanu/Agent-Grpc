@@ -31,7 +31,8 @@ namespace Broker.Tests
                var storage = new MessageStorageService();
                var kept = CreateNews("kept", isPersistent: true);
                var consumed = CreateNews("consumed", isPersistent: true);
-               storage.TryAdd(kept, out _);
+               storage.TryAdd(kept, out var keptEntry);
+               keptEntry.Attempts = 2;
                storage.TryAdd(consumed, out var consumedEntry);
                storage.TryAdd(CreateNews("transient", isPersistent: false), out _);
                // O stire scoasa din coada dar inca nelivrata trebuie sa ajunga totusi in backup.
@@ -45,6 +46,7 @@ namespace Broker.Tests
 
                var restored = Assert.Single(restarted.GetPendingPersistent());
                Assert.Equal(kept, restored.News);
+               Assert.Equal(2, restored.Attempts);
                Assert.Equal(kept, restarted.GetNext()?.News);
                Assert.Null(restarted.GetNext());
           }

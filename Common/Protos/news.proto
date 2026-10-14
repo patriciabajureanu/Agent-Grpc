@@ -28,7 +28,3 @@ message News {
   int32 schema_version = 9;
 }
 
-// Formatul intern al fisierului de backup al Broker-ului (nu este trimis prin retea).
-message NewsBackup {
-  repeated News items = 1;
-}

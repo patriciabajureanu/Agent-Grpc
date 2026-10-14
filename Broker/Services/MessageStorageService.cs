@@ -48,6 +48,13 @@ namespace Broker.Services
                stored.UpdatedAt = DateTime.UtcNow;
           }
 
+          public void MarkDeadLettered(StoredNews stored, string reason)
+          {
+               stored.Status = NewsStatus.DeadLettered;
+               stored.LastError = reason;
+               stored.UpdatedAt = DateTime.UtcNow;
+          }
+
           public StoredNews? Find(string messageId)
           {
                return _known.TryGetValue(messageId, out var stored) ? stored : null;

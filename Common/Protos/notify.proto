@@ -14,6 +14,18 @@ message NotifyRequest {
   News news = 1;
 }
 
+// Confirmarea data de Receiver dupa ce a aplicat efectul local.
+enum AckStatus {
+  ACK_STATUS_UNSPECIFIED = 0;
+  // Efectul a fost aplicat acum sau fusese deja aplicat (duplicat): Broker-ul nu mai livreaza stirea.
+  ACK_STATUS_ACK = 1;
+  // Eroare temporara la Receiver: Broker-ul reincearca, cu backoff si un numar limitat de incercari.
+  ACK_STATUS_NACK_RETRY = 2;
+  // Stire neprocesabila (de exemplu schema nesuportata): nu se reincearca, ajunge in dead-letter.
+  ACK_STATUS_NACK_REJECT = 3;
+}
+
 message NotifyReply {
-  bool isSuccess = 1;
+  AckStatus status = 1;
+  string reason = 2;
 }

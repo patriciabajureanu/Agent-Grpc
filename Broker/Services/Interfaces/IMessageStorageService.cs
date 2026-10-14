@@ -15,6 +15,8 @@ namespace Broker.Services.Interfaces
 
           void MarkDelivered(StoredNews stored);
 
+          void MarkDeadLettered(StoredNews stored, string reason);
+
           StoredNews? Find(string messageId);
 
           // Stirile persistente inca nelivrate, inclusiv cele aflate in curs de livrare.
