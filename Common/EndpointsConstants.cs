@@ -1,10 +1,11 @@
-﻿namespace Common
+namespace Common
 {
      public class EndpointsConstants
      {
-          public const string BrokerAddress = "http://127.0.0.1:5001";
+          // Poate fi schimbata fara recompilare prin variabila de mediu BROKER_ADDRESS (vezi .env.example).
+          public static readonly string BrokerAddress = Environment.GetEnvironmentVariable("BROKER_ADDRESS") ?? "https://localhost:5001";
 
-          public const string SubscribersAddress = "http://127.0.0.1:0";
+          public const string SubscribersAddress = "https://127.0.0.1:0";
 
      }
 }

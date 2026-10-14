@@ -1,4 +1,4 @@
-﻿using Broker.Models;
+using Broker.Models;
 
 namespace Broker.Services.Interfaces
 {
@@ -8,7 +8,7 @@ namespace Broker.Services.Interfaces
 
           void Remove(string address);
 
-          IList<Connection> GetConnectionsByTopic(string topic);
+          IList<Connection> GetConnectionsByCategory(string category);
 
      }
 }

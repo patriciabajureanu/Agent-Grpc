@@ -1,18 +1,49 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 option csharp_namespace = "GrpcAgent";
 
-package GrpcAgent;
+package agent.v1;
 
+import "Protos/news.proto";
+
+// Semantica erorilor:
+// INVALID_ARGUMENT    - campuri lipsa sau invalide; nu se reincearca.
+// FAILED_PRECONDITION - schema_version nesuportata; nu se reincearca.
+// ALREADY_EXISTS      - message_id refolosit pentru o stire cu alt continut; nu se reincearca.
+// UNAVAILABLE, DEADLINE_EXCEEDED - se poate reincerca, cu acelasi message_id.
+// Publicarea este idempotenta: o repetare cu acelasi message_id si acelasi continut
+// intoarce OK cu duplicate = true si nu creeaza o a doua livrare.
 service Publisher {
   rpc PublishMessage (PublishRequest) returns (PublishReply);
+  // Starea unei stiri publicate; permite clientului sa afle rezultatul cand raspunsul la publicare s-a pierdut.
+  rpc GetNewsStatus (NewsStatusRequest) returns (NewsStatusReply);
 }
 
+// Sender completeaza tot plicul in afara de occurred_at, care este atribuit de Broker.
 message PublishRequest {
-  string topic = 1;
-  string content = 2;
+  News news = 1;
 }
 
 message PublishReply {
-  bool isSuccess = 1;
+  string message_id = 1;
+  bool duplicate = 2;
+}
+
+enum NewsStatus {
+  NEWS_STATUS_UNSPECIFIED = 0;
+  // Broker nu cunoaste stirea (nu a fost primita sau a iesit din fereastra de deduplicare).
+  NEWS_STATUS_UNKNOWN = 1;
+  NEWS_STATUS_PENDING = 2;
+  NEWS_STATUS_DELIVERED = 3;
+  NEWS_STATUS_DEAD_LETTERED = 4;
+}
+
+message NewsStatusRequest {
+  string message_id = 1;
+}
+
+message NewsStatusReply {
+  NewsStatus status = 1;
+  int32 attempts = 2;
+  string last_error = 3;
 }

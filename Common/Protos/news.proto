@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcAgent";
+
+// Versiunea contractului face parte din numele pachetului: o schimbare incompatibila inseamna agent.v2.
+package agent.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Plicul (envelope) unei stiri, schema_version = 1.
+// Reguli de compatibilitate: numerele campurilor nu se schimba si nu se refolosesc,
+// campurile noi primesc numere noi, iar consumatorii ignora campurile necunoscute.
+message News {
+  // Identificator stabil generat de Sender; este si cheia de idempotenta.
+  string message_id = 1;
+  // Tema stirii; este cheia de rutare catre abonati.
+  string category = 2;
+  string title = 3;
+  string content = 4;
+  // Momentul acceptarii de catre Broker, in UTC.
+  google.protobuf.Timestamp occurred_at = 5;
+  // true = stirea este salvata pe disc si supravietuieste repornirii Broker-ului.
+  bool is_persistent = 6;
+  // Propagat neschimbat de Sender, Broker si Receiver (si in header-ul x-correlation-id).
+  string correlation_id = 7;
+  // Tipul mesajului; singura valoare acceptata in v1 este "news.published".
+  string message_type = 8;
+  int32 schema_version = 9;
+}
+

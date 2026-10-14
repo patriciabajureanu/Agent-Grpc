@@ -1,4 +1,3 @@
-
 using Common;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
@@ -10,18 +9,17 @@ namespace Broker
      {
           public static void Main(string[] args)
           {
-               AppContext.SetSwitch(
-                   "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport",
-                   true);
-
                WebHost.CreateDefaultBuilder(args)
                    .ConfigureLogging(logging =>
                    {
-                        logging.AddConsole();
-                        logging.SetMinimumLevel(LogLevel.Information);
-                        logging.AddFilter(
-                         "Microsoft.AspNetCore",
-                         LogLevel.Information);
+                        // O linie JSON per eveniment, cu timestamp UTC si campurile din scope (CorrelationId, MessageId).
+                        logging.ClearProviders();
+                        logging.AddJsonConsole(options =>
+                        {
+                             options.IncludeScopes = true;
+                             options.UseUtcTimestamp = true;
+                             options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+                        });
                    })
                    .UseStartup<Startup>()
                    .UseUrls(EndpointsConstants.BrokerAddress)

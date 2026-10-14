@@ -1,11 +1,12 @@
-
 using Common;
 using Grpc.Net.Client;
 using GrpcAgent;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Receiver.Services;
 
 namespace Receiver
 {
@@ -13,32 +14,47 @@ namespace Receiver
      {
           public static void Main(string[] args)
           {
-               AppContext.SetSwitch(
-                   "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport",
-                   true);
+               Console.Write("Enter the news category (e.g. sport, tech): ");
+               var category = Console.ReadLine()?.Trim().ToLowerInvariant();
+
+               if (string.IsNullOrWhiteSpace(category))
+               {
+                    Console.WriteLine("Invalid category.");
+                    return;
+               }
+
+               // Jurnalul ramane pe disc intre reporniri, ca o stire deja procesata sa nu fie procesata a doua oara.
+               var journal = new NewsJournal(Environment.GetEnvironmentVariable("RECEIVER_JOURNAL")
+                    ?? $"received-{category}.jsonl");
+               Console.WriteLine($"Journal: {journal.Path} ({journal.Count} news already processed)");
 
                using var host = WebHost.CreateDefaultBuilder(args)
                    .ConfigureLogging(logging =>
                    {
+                        // O linie JSON per eveniment, cu timestamp UTC si campurile din scope (CorrelationId, MessageId).
                         logging.ClearProviders();
-                        logging.AddConsole();
-                        logging.SetMinimumLevel(LogLevel.Information);
-                        logging.AddFilter("Microsoft.AspNetCore", LogLevel.Information);
+                        logging.AddJsonConsole(options =>
+                        {
+                             options.IncludeScopes = true;
+                             options.UseUtcTimestamp = true;
+                             options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+                        });
                    })
+                   .ConfigureServices(services => services.AddSingleton(journal))
                    .UseStartup<Startup>()
                    .UseUrls(EndpointsConstants.SubscribersAddress)
                    .Build();
 
                host.Start();
 
-               Subscribe(host);
+               Subscribe(host, category);
 
                Console.WriteLine("Press enter to exit");
                Console.ReadLine();
                host.StopAsync().GetAwaiter().GetResult();
           }
 
-          private static void Subscribe(IWebHost host)
+          private static void Subscribe(IWebHost host, string category)
           {
                using var channel = GrpcChannel.ForAddress(
                    EndpointsConstants.BrokerAddress);
@@ -50,20 +66,14 @@ namespace Receiver
                    ?.Addresses.FirstOrDefault()
                    ?? throw new InvalidOperationException("Receiver has no listening address.");
 
+               // Certificatul de dezvoltare HTTPS este emis doar pentru "localhost", nu pentru 127.0.0.1.
+               address = address.Replace("127.0.0.1", "localhost");
+
                Console.WriteLine($"Subscriber listening at: {address}");
-
-               Console.Write("Enter the topic: ");
-               var topic = Console.ReadLine()?.Trim().ToLowerInvariant();
-
-               if (string.IsNullOrWhiteSpace(topic))
-               {
-                    Console.WriteLine("Invalid topic.");
-                    return;
-               }
 
                var request = new SubscribeRequest()
                {
-                    Topic = topic,
+                    Category = category,
                     Address = address
                };
 

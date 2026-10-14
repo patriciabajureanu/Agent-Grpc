@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -18,9 +18,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <Protobuf Include="Protos\broker_storage.proto" />
+    <Protobuf Include="Protos\news.proto" />
     <Protobuf Include="Protos\notify.proto" />
     <Protobuf Include="Protos\publish.proto" />
     <Protobuf Include="Protos\subscribe.proto" />
