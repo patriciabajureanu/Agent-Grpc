@@ -21,10 +21,16 @@ namespace Broker.Services
                _interval = TimeSpan.FromSeconds(configuration.GetValue("Persistence:IntervalSeconds", 5));
           }
 
+          // Folosite de health check-ul de pregatire (/health/ready).
+          public bool IsRestored { get; private set; }
+
+          public string? LastBackupError { get; private set; }
+
           public override async Task StartAsync(CancellationToken cancellationToken)
           {
                // Restaurarea are loc inainte de primul backup, altfel backup-ul gol ar suprascrie fisierul.
                await RestoreAsync(cancellationToken);
+               IsRestored = true;
                await base.StartAsync(cancellationToken);
           }
 
@@ -59,9 +65,11 @@ namespace Broker.Services
                     var tempPath = _backupPath + ".tmp";
                     await File.WriteAllTextAsync(tempPath, JsonFormatter.Default.Format(backup), cancellationToken);
                     File.Move(tempPath, _backupPath, overwrite: true);
+                    LastBackupError = null;
                }
                catch (Exception exception) when (exception is not OperationCanceledException)
                {
+                    LastBackupError = exception.Message;
                     _logger.LogError(LogEvents.BackupFailed, exception, "Could not write the backup {Path}", _backupPath);
                }
           }
