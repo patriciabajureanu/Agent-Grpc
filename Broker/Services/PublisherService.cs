@@ -16,13 +16,43 @@ namespace Broker.Services
           public override Task<PublishReply> PublishMessage(PublishRequest request, ServerCallContext context)
           {
                var news = Validate(request.News, context);
-               Console.WriteLine($"Received: [{news.Category}] {news.Title} persistent={news.IsPersistent} id={news.MessageId} correlation={news.CorrelationId}");
 
-               _messageStorage.Add(news);
+               if (!_messageStorage.TryAdd(news, out var existing))
+               {
+                    // Repetarea unei publicari (de exemplu dupa un raspuns pierdut) nu creeaza o a doua livrare.
+                    if (existing.News.Category != news.Category
+                         || existing.News.Title != news.Title
+                         || existing.News.Content != news.Content)
+                    {
+                         throw new RpcException(new Status(StatusCode.AlreadyExists,
+                              $"message_id {news.MessageId} was already used for different news."));
+                    }
+
+                    Console.WriteLine($"Duplicate publish ignored: id={news.MessageId} correlation={news.CorrelationId}");
+                    return Task.FromResult(new PublishReply() { MessageId = news.MessageId, Duplicate = true });
+               }
+
+               Console.WriteLine($"Received: [{news.Category}] {news.Title} persistent={news.IsPersistent} id={news.MessageId} correlation={news.CorrelationId}");
 
                return Task.FromResult(new PublishReply()
                {
                     MessageId = news.MessageId
+               });
+          }
+
+          public override Task<NewsStatusReply> GetNewsStatus(NewsStatusRequest request, ServerCallContext context)
+          {
+               var stored = _messageStorage.Find(request.MessageId);
+               if (stored is null)
+               {
+                    return Task.FromResult(new NewsStatusReply() { Status = NewsStatus.Unknown });
+               }
+
+               return Task.FromResult(new NewsStatusReply()
+               {
+                    Status = stored.Status,
+                    Attempts = stored.Attempts,
+                    LastError = stored.LastError
                });
           }
 

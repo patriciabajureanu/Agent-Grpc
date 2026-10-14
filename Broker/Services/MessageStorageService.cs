@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Broker.Models;
 using Broker.Services.Interfaces;
 using GrpcAgent;
 
@@ -6,37 +7,66 @@ namespace Broker.Services
 {
      public class MessageStorageService : IMessageStorageService
      {
-          // Coada da ordinea de livrare; dictionarul tine tot ce nu a fost consumat, ca backup-ul sa nu piarda stirile scoase din coada.
-          private readonly ConcurrentQueue<News> _queue;
-          private readonly ConcurrentDictionary<string, News> _unconsumed;
+          // Coada da ordinea de livrare; dictionarul tine toate stirile cunoscute dupa message_id (deduplicare si stare).
+          private readonly ConcurrentQueue<StoredNews> _queue;
+          private readonly ConcurrentDictionary<string, StoredNews> _known;
 
           public MessageStorageService()
           {
-               _queue = new ConcurrentQueue<News>();
-               _unconsumed = new ConcurrentDictionary<string, News>();
+               _queue = new ConcurrentQueue<StoredNews>();
+               _known = new ConcurrentDictionary<string, StoredNews>();
           }
 
-          public void Add(News news)
+          public bool TryAdd(News news, out StoredNews stored)
           {
-               _unconsumed[news.MessageId] = news;
-               _queue.Enqueue(news);
+               var candidate = new StoredNews(news);
+               stored = _known.GetOrAdd(news.MessageId, candidate);
+               if (!ReferenceEquals(stored, candidate))
+               {
+                    return false;
+               }
+
+               _queue.Enqueue(stored);
+               return true;
           }
 
-          public News? GetNext()
+          public StoredNews? GetNext()
           {
-               _queue.TryDequeue(out var news);
+               _queue.TryDequeue(out var stored);
 
-               return news;
+               return stored;
           }
 
-          public void MarkConsumed(string id)
+          public void Requeue(StoredNews stored)
           {
-               _unconsumed.TryRemove(id, out _);
+               _queue.Enqueue(stored);
           }
 
-          public IList<News> GetUnconsumedPersistent()
+          public void MarkDelivered(StoredNews stored)
           {
-               return _unconsumed.Values.Where(x => x.IsPersistent).ToList();
+               stored.Status = NewsStatus.Delivered;
+               stored.UpdatedAt = DateTime.UtcNow;
+          }
+
+          public StoredNews? Find(string messageId)
+          {
+               return _known.TryGetValue(messageId, out var stored) ? stored : null;
+          }
+
+          public IList<StoredNews> GetPendingPersistent()
+          {
+               return _known.Values.Where(x => x.Status == NewsStatus.Pending && x.News.IsPersistent).ToList();
+          }
+
+          public void PurgeCompleted(DateTime olderThan)
+          {
+               foreach (var (id, stored) in _known)
+               {
+                    if (stored.Status != NewsStatus.Pending && stored.UpdatedAt < olderThan)
+                    {
+                         _known.TryRemove(id, out _);
+                    }
+               }
           }
      }
 }

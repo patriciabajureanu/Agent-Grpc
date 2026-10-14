@@ -31,21 +31,21 @@ namespace Broker.Tests
                var storage = new MessageStorageService();
                var kept = CreateNews("kept", isPersistent: true);
                var consumed = CreateNews("consumed", isPersistent: true);
-               storage.Add(kept);
-               storage.Add(consumed);
-               storage.Add(CreateNews("transient", isPersistent: false));
+               storage.TryAdd(kept, out _);
+               storage.TryAdd(consumed, out var consumedEntry);
+               storage.TryAdd(CreateNews("transient", isPersistent: false), out _);
                // O stire scoasa din coada dar inca nelivrata trebuie sa ajunga totusi in backup.
                storage.GetNext();
-               storage.MarkConsumed(consumed.MessageId);
+               storage.MarkDelivered(consumedEntry);
 
                await CreateWorker(storage).BackupAsync(CancellationToken.None);
 
                var restarted = new MessageStorageService();
                await CreateWorker(restarted).RestoreAsync(CancellationToken.None);
 
-               var restored = Assert.Single(restarted.GetUnconsumedPersistent());
-               Assert.Equal(kept, restored);
-               Assert.Equal(kept, restarted.GetNext());
+               var restored = Assert.Single(restarted.GetPendingPersistent());
+               Assert.Equal(kept, restored.News);
+               Assert.Equal(kept, restarted.GetNext()?.News);
                Assert.Null(restarted.GetNext());
           }
 
@@ -57,7 +57,7 @@ namespace Broker.Tests
 
                await CreateWorker(storage).RestoreAsync(CancellationToken.None);
 
-               Assert.Empty(storage.GetUnconsumedPersistent());
+               Assert.Empty(storage.GetPendingPersistent());
                Assert.False(File.Exists(_backupPath));
                Assert.True(File.Exists(_backupPath + ".corrupt"));
           }

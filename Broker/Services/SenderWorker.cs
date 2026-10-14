@@ -1,3 +1,4 @@
+using Broker.Models;
 using Broker.Services.Interfaces;
 using Common;
 using Grpc.Core;
@@ -7,6 +8,9 @@ namespace Broker.Services
 {
      public class SenderWorker : BackgroundService
      {
+          // shortcut: fereastra de deduplicare este doar in memorie; dupa repornirea Broker-ului deduplicarea ramane la Receiver.
+          private static readonly TimeSpan DeduplicationWindow = TimeSpan.FromHours(1);
+
           private readonly IMessageStorageService _messageStorage;
           private readonly IConnectionStorageService _connectionStorage;
 
@@ -24,11 +28,12 @@ namespace Broker.Services
                do
                {
                     // Stirile fara niciun abonat care le-a primit raman in storage si sunt reincercate la urmatorul tick.
-                    var undelivered = new List<News>();
+                    var undelivered = new List<StoredNews>();
 
                     while (!stoppingToken.IsCancellationRequested
-                         && _messageStorage.GetNext() is { } news)
+                         && _messageStorage.GetNext() is { } stored)
                     {
+                         var news = stored.News;
                          var delivered = false;
                          var connections = _connectionStorage.GetConnectionsByCategory(news.Category);
 
@@ -48,7 +53,7 @@ namespace Broker.Services
                               }
                               catch (RpcException) when (stoppingToken.IsCancellationRequested)
                               {
-                                   _messageStorage.Add(news);
+                                   _messageStorage.Requeue(stored);
                                    return;
                               }
                               catch (RpcException exception)
@@ -67,15 +72,16 @@ namespace Broker.Services
 
                          if (delivered)
                          {
-                              _messageStorage.MarkConsumed(news.MessageId);
+                              _messageStorage.MarkDelivered(stored);
                          }
                          else
                          {
-                              undelivered.Add(news);
+                              undelivered.Add(stored);
                          }
                     }
 
-                    undelivered.ForEach(_messageStorage.Add);
+                    undelivered.ForEach(_messageStorage.Requeue);
+                    _messageStorage.PurgeCompleted(DateTime.UtcNow - DeduplicationWindow);
                } while (await timer.WaitForNextTickAsync(stoppingToken));
           }
      }

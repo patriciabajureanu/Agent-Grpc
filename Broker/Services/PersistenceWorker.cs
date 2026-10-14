@@ -47,7 +47,7 @@ namespace Broker.Services
           public async Task BackupAsync(CancellationToken cancellationToken)
           {
                var backup = new NewsBackup();
-               backup.Items.AddRange(_messageStorage.GetUnconsumedPersistent());
+               backup.Items.AddRange(_messageStorage.GetPendingPersistent().Select(x => x.News));
 
                try
                {
@@ -75,7 +75,7 @@ namespace Broker.Services
                     var backup = JsonParser.Default.Parse<NewsBackup>(json);
                     foreach (var news in backup.Items)
                     {
-                         _messageStorage.Add(news);
+                         _messageStorage.TryAdd(news, out _);
                     }
                     Console.WriteLine($"Restored {backup.Items.Count} persistent news from {_backupPath}");
                }
