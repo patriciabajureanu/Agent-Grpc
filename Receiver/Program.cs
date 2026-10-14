@@ -31,10 +31,14 @@ namespace Receiver
                using var host = WebHost.CreateDefaultBuilder(args)
                    .ConfigureLogging(logging =>
                    {
+                        // O linie JSON per eveniment, cu timestamp UTC si campurile din scope (CorrelationId, MessageId).
                         logging.ClearProviders();
-                        logging.AddConsole();
-                        logging.SetMinimumLevel(LogLevel.Information);
-                        logging.AddFilter("Microsoft.AspNetCore", LogLevel.Information);
+                        logging.AddJsonConsole(options =>
+                        {
+                             options.IncludeScopes = true;
+                             options.UseUtcTimestamp = true;
+                             options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+                        });
                    })
                    .ConfigureServices(services => services.AddSingleton(journal))
                    .UseStartup<Startup>()

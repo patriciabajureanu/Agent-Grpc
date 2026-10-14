@@ -1,4 +1,5 @@
 using Broker.Services.Interfaces;
+using Common;
 using Google.Protobuf;
 using GrpcAgent;
 
@@ -10,10 +11,12 @@ namespace Broker.Services
           private readonly IMessageStorageService _messageStorage;
           private readonly string _backupPath;
           private readonly TimeSpan _interval;
+          private readonly ILogger<PersistenceWorker> _logger;
 
-          public PersistenceWorker(IMessageStorageService messageStorage, IConfiguration configuration)
+          public PersistenceWorker(IMessageStorageService messageStorage, IConfiguration configuration, ILogger<PersistenceWorker> logger)
           {
                _messageStorage = messageStorage;
+               _logger = logger;
                _backupPath = configuration["Persistence:BackupPath"] ?? "news-backup.json";
                _interval = TimeSpan.FromSeconds(configuration.GetValue("Persistence:IntervalSeconds", 5));
           }
@@ -59,7 +62,7 @@ namespace Broker.Services
                }
                catch (Exception exception) when (exception is not OperationCanceledException)
                {
-                    Console.WriteLine($"Could not write the backup {_backupPath}. {exception.Message}");
+                    _logger.LogError(LogEvents.BackupFailed, exception, "Could not write the backup {Path}", _backupPath);
                }
           }
 
@@ -81,13 +84,13 @@ namespace Broker.Services
                               stored.Attempts = entry.Attempts;
                          }
                     }
-                    Console.WriteLine($"Restored {backup.Items.Count} persistent news from {_backupPath}");
+                    _logger.LogInformation(LogEvents.BackupRestored, "Restored {Count} persistent news from {Path}", backup.Items.Count, _backupPath);
                }
                catch (Exception exception) when (exception is InvalidProtocolBufferException or InvalidJsonException)
                {
                     // Fisierul stricat este pastrat pentru analiza in loc sa fie suprascris de urmatorul backup.
                     File.Move(_backupPath, _backupPath + ".corrupt", overwrite: true);
-                    Console.WriteLine($"Backup {_backupPath} is corrupt and was moved to {_backupPath}.corrupt. {exception.Message}");
+                    _logger.LogError(LogEvents.BackupCorrupt, exception, "Backup {Path} is corrupt and was moved to {Path}.corrupt", _backupPath, _backupPath);
                }
           }
      }

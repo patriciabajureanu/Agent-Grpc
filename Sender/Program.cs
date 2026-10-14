@@ -1,8 +1,12 @@
 using System;
 using Grpc.Net.Client;
+using System.Diagnostics;
 using Common;
 using Grpc.Core;
 using GrpcAgent;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 namespace Sender
 {
@@ -15,6 +19,19 @@ namespace Sender
           static async Task Main(string[] args)
           {
                Console.WriteLine("Publisher");
+
+               // Log-urile JSON merg pe stderr, ca sa poata fi separate de dialogul din consola: dotnet run --project Sender 2> sender.log
+               using var loggerFactory = LoggerFactory.Create(builder =>
+               {
+                    builder.AddJsonConsole(options =>
+                    {
+                         options.IncludeScopes = true;
+                         options.UseUtcTimestamp = true;
+                         options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+                    });
+                    builder.Services.Configure<ConsoleLoggerOptions>(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
+               });
+               var logger = loggerFactory.CreateLogger("Sender");
 
                using var channel = GrpcChannel.ForAddress(EndpointsConstants.BrokerAddress);
                var client = new Publisher.PublisherClient(channel);
@@ -68,33 +85,41 @@ namespace Sender
                          }
                     };
 
-                    await PublishAsync(client, request);
+                    await PublishAsync(client, request, logger);
                }
 
           }
 
           // Reincearca doar erorile temporare, cu acelasi message_id: Broker-ul recunoaste repetarea si nu dubleaza stirea.
-          private static async Task PublishAsync(Publisher.PublisherClient client, PublishRequest request)
+          private static async Task PublishAsync(Publisher.PublisherClient client, PublishRequest request, ILogger logger)
           {
                var headers = new Metadata { { ContractConstants.CorrelationIdHeader, request.News.CorrelationId } };
+               using var scope = logger.BeginScope(LogEvents.Scope(request.News.CorrelationId, request.News.MessageId));
 
                for (var attempt = 1; ; attempt++)
                {
+                    var stopwatch = Stopwatch.StartNew();
                     try
                     {
                          var reply = await client.PublishMessageAsync(request, headers,
                               deadline: DateTime.UtcNow.AddSeconds(5));
+                         logger.LogInformation(LogEvents.PublishSucceeded, "Publish attempt {Attempt} succeeded, duplicate {Duplicate}, in {DurationMs} ms",
+                              attempt, reply.Duplicate, stopwatch.ElapsedMilliseconds);
                          Console.WriteLine($"Published news {reply.MessageId} (correlation {request.News.CorrelationId}){(reply.Duplicate ? ", already accepted earlier" : "")}");
                          return;
                     }
                     catch (RpcException e) when (RetryPolicy.IsTransient(e.StatusCode) && attempt < MaxAttempts)
                     {
                          var delay = RetryPolicy.GetDelay(attempt, BaseDelay, MaxDelay);
+                         logger.LogWarning(LogEvents.PublishRetry, "Publish attempt {Attempt}/{MaxAttempts} failed with {Result} in {DurationMs} ms; retrying in {DelayMs} ms",
+                              attempt, MaxAttempts, e.StatusCode, stopwatch.ElapsedMilliseconds, (int)delay.TotalMilliseconds);
                          Console.WriteLine($"Attempt {attempt}/{MaxAttempts} failed with {e.StatusCode}; retrying in {delay.TotalMilliseconds:F0} ms");
                          await Task.Delay(delay);
                     }
                     catch (RpcException e)
                     {
+                         logger.LogError(LogEvents.PublishFailed, "Publish failed after {Attempt} attempt(s) with {Result}: {Error}",
+                              attempt, e.StatusCode, e.Status.Detail);
                          Console.WriteLine($"Publishing news {request.News.MessageId} failed after {attempt} attempt(s): {e.StatusCode} {e.Status.Detail}");
                          return;
                     }

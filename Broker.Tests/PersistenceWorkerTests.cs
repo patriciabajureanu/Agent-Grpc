@@ -1,6 +1,7 @@
 using Broker.Services;
 using GrpcAgent;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Broker.Tests
 {
@@ -13,7 +14,7 @@ namespace Broker.Tests
                var configuration = new ConfigurationBuilder()
                     .AddInMemoryCollection(new Dictionary<string, string?> { ["Persistence:BackupPath"] = _backupPath })
                     .Build();
-               return new PersistenceWorker(storage, configuration);
+               return new PersistenceWorker(storage, configuration, NullLogger<PersistenceWorker>.Instance);
           }
 
           private static News CreateNews(string title, bool isPersistent) => new()

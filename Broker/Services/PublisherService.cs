@@ -9,13 +9,31 @@ namespace Broker.Services
      public class PublisherService : Publisher.PublisherBase
      {
           private readonly IMessageStorageService _messageStorage;
-          public PublisherService(IMessageStorageService messageStorageService) 
+          private readonly ILogger<PublisherService> _logger;
+
+          public PublisherService(IMessageStorageService messageStorageService, ILogger<PublisherService> logger)
           {
                _messageStorage = messageStorageService;
+               _logger = logger;
           }
+
           public override Task<PublishReply> PublishMessage(PublishRequest request, ServerCallContext context)
           {
-               var news = Validate(request.News, context);
+               var correlationId = !string.IsNullOrWhiteSpace(request.News?.CorrelationId)
+                    ? request.News.CorrelationId
+                    : context.RequestHeaders.GetValue(ContractConstants.CorrelationIdHeader) ?? Guid.NewGuid().ToString();
+               using var scope = _logger.BeginScope(LogEvents.Scope(correlationId, request.News?.MessageId ?? ""));
+
+               News news;
+               try
+               {
+                    news = Validate(request.News, correlationId);
+               }
+               catch (RpcException exception)
+               {
+                    _logger.LogWarning(LogEvents.NewsRejected, "Publish rejected: {Result} {Error}", exception.StatusCode, exception.Status.Detail);
+                    throw;
+               }
 
                if (!_messageStorage.TryAdd(news, out var existing))
                {
@@ -24,15 +42,17 @@ namespace Broker.Services
                          || existing.News.Title != news.Title
                          || existing.News.Content != news.Content)
                     {
+                         _logger.LogWarning(LogEvents.NewsRejected, "Publish rejected: {Result} {Error}", StatusCode.AlreadyExists, "message_id reused for different news");
                          throw new RpcException(new Status(StatusCode.AlreadyExists,
                               $"message_id {news.MessageId} was already used for different news."));
                     }
 
-                    Console.WriteLine($"Duplicate publish ignored: id={news.MessageId} correlation={news.CorrelationId}");
+                    _logger.LogInformation(LogEvents.NewsDuplicate, "Duplicate publish acknowledged, status {Result}", existing.Status);
                     return Task.FromResult(new PublishReply() { MessageId = news.MessageId, Duplicate = true });
                }
 
-               Console.WriteLine($"Received: [{news.Category}] {news.Title} persistent={news.IsPersistent} id={news.MessageId} correlation={news.CorrelationId}");
+               _logger.LogInformation(LogEvents.NewsAccepted, "News accepted in category {Category}, persistent {IsPersistent}",
+                    news.Category, news.IsPersistent);
 
                return Task.FromResult(new PublishReply()
                {
@@ -57,7 +77,7 @@ namespace Broker.Services
           }
 
           // Valideaza plicul primit si intoarce copia normalizata pe care o pastreaza Broker-ul.
-          private static News Validate(News? input, ServerCallContext context)
+          private static News Validate(News? input, string correlationId)
           {
                if (input is null
                     || !Guid.TryParse(input.MessageId, out _)
@@ -80,10 +100,6 @@ namespace Broker.Services
                     throw new RpcException(new Status(StatusCode.InvalidArgument,
                          $"message_type must be '{ContractConstants.NewsPublished}'."));
                }
-
-               var correlationId = !string.IsNullOrWhiteSpace(input.CorrelationId)
-                    ? input.CorrelationId
-                    : context.RequestHeaders.GetValue(ContractConstants.CorrelationIdHeader) ?? Guid.NewGuid().ToString();
 
                // Clone pastreaza si campurile necunoscute trimise de un producator mai nou.
                var news = input.Clone();

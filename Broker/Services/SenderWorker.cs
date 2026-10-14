@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Broker.Models;
 using Broker.Services.Interfaces;
 using Common;
@@ -20,13 +21,16 @@ namespace Broker.Services
           private readonly TimeSpan _maxDelay;
           private readonly TimeSpan _pollInterval;
           private readonly string _deadLetterPath;
+          private readonly ILogger<SenderWorker> _logger;
 
           public SenderWorker(IMessageStorageService messageStorage,
                IConnectionStorageService connectionStorage,
-               IConfiguration configuration)
+               IConfiguration configuration,
+               ILogger<SenderWorker> logger)
           {
                _messageStorage = messageStorage;
                _connectionStorage = connectionStorage;
+               _logger = logger;
                _maxAttempts = configuration.GetValue("Delivery:MaxAttempts", 5);
                _baseDelay = TimeSpan.FromMilliseconds(configuration.GetValue("Delivery:BaseDelayMs", 1000));
                _maxDelay = TimeSpan.FromMilliseconds(configuration.GetValue("Delivery:MaxDelayMs", 30000));
@@ -60,6 +64,7 @@ namespace Broker.Services
                               continue;
                          }
 
+                         using var scope = _logger.BeginScope(LogEvents.Scope(stored.News.CorrelationId, stored.News.MessageId));
                          var outcome = await DeliverAsync(stored.News, connections, stoppingToken);
                          if (outcome is null)
                          {
@@ -83,8 +88,11 @@ namespace Broker.Services
                          else
                          {
                               stored.LastError = error;
-                              stored.NextAttemptAt = DateTime.UtcNow + RetryPolicy.GetDelay(stored.Attempts, _baseDelay, _maxDelay);
+                              var delay = RetryPolicy.GetDelay(stored.Attempts, _baseDelay, _maxDelay);
+                              stored.NextAttemptAt = DateTime.UtcNow + delay;
                               undelivered.Add(stored);
+                              _logger.LogWarning(LogEvents.DeliveryFailed, "Delivery attempt {Attempt}/{MaxAttempts} failed: {Error}; next attempt in {DelayMs} ms",
+                                   stored.Attempts, _maxAttempts, error, (int)delay.TotalMilliseconds);
                          }
                     }
 
@@ -105,13 +113,15 @@ namespace Broker.Services
                     var client = new Notifier.NotifierClient(connection.Channel);
                     var request = new NotifyRequest() { News = news };
 
+                    var stopwatch = Stopwatch.StartNew();
                     try
                     {
                          var reply = await client.NotifyAsync(request,
                               new Metadata { { ContractConstants.CorrelationIdHeader, news.CorrelationId } },
                               deadline: DateTime.UtcNow.AddSeconds(5),
                               cancellationToken: stoppingToken);
-                         Console.WriteLine($"Notified subscriber {connection.Address} with {news.MessageId}. Response: {reply.Status} {reply.Reason}");
+                         _logger.LogInformation(LogEvents.NewsDelivered, "Subscriber {Subscriber} answered {Result} {Reason} in {DurationMs} ms",
+                              connection.Address, reply.Status, reply.Reason, stopwatch.ElapsedMilliseconds);
 
                          if (reply.Status == AckStatus.Ack)
                          {
@@ -132,17 +142,20 @@ namespace Broker.Services
                     }
                     catch (RpcException exception)
                     {
+                         error = $"{exception.StatusCode} {exception.Status.Detail}";
+                         _logger.LogWarning(LogEvents.DeliveryFailed, "Subscriber {Subscriber} failed with {Result} {Error} in {DurationMs} ms",
+                              connection.Address, exception.StatusCode, exception.Status.Detail, stopwatch.ElapsedMilliseconds);
                          if (exception.StatusCode == StatusCode.Unavailable)
                          {
                               _connectionStorage.Remove(connection.Address);
+                              _logger.LogWarning(LogEvents.SubscriberRemoved, "Subscriber {Subscriber} removed: unavailable", connection.Address);
                          }
-                         error = $"{exception.StatusCode} {exception.Status.Detail}";
-                         Console.WriteLine($"RPC Error notifying subscriber {connection.Address}. {exception.Message}");
                     }
                     catch (Exception exception)
                     {
                          error = exception.Message;
-                         Console.WriteLine($"Error notifying subscriber {connection.Address}. {exception.Message}");
+                         _logger.LogError(LogEvents.DeliveryFailed, exception, "Subscriber {Subscriber} failed in {DurationMs} ms",
+                              connection.Address, stopwatch.ElapsedMilliseconds);
                     }
                }
 
@@ -167,10 +180,10 @@ namespace Broker.Services
                }
                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                {
-                    Console.WriteLine($"Could not write news {stored.News.MessageId} to {_deadLetterPath}. {exception.Message}");
+                    _logger.LogError(LogEvents.NewsDeadLettered, exception, "Could not write the dead-letter file {Path}", _deadLetterPath);
                }
 
-               Console.WriteLine($"Dead-lettered news {stored.News.MessageId}: {reason}");
+               _logger.LogError(LogEvents.NewsDeadLettered, "News moved to dead-letter after {Attempts} attempt(s): {Reason}", stored.Attempts, reason);
           }
      }
 }
