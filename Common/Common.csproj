@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Protobuf Include="Protos\news.proto" />
     <Protobuf Include="Protos\notify.proto" />
     <Protobuf Include="Protos\publish.proto" />
     <Protobuf Include="Protos\subscribe.proto" />

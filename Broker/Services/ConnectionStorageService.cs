@@ -24,11 +24,11 @@ namespace Broker.Services
                }
           }
 
-          public IList<Connection> GetConnectionsByTopic(string topic)
+          public IList<Connection> GetConnectionsByCategory(string category)
           {
                lock(_locker)
                {
-                    var filteredConnections = _connections.Where(x => x.Topic == topic).ToList();
+                    var filteredConnections = _connections.Where(x => x.Category == category).ToList();
                     return filteredConnections;
                }
           }

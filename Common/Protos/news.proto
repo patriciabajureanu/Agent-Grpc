@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcAgent";
+
+package GrpcAgent;
+
+import "google/protobuf/timestamp.proto";
+
+// O stire: categoria (tema) este cheia de rutare intre Sender si Receiver.
+message News {
+  string id = 1;
+  string category = 2;
+  string title = 3;
+  string content = 4;
+  google.protobuf.Timestamp published_at = 5;
+  // true = stirea este salvata pe disc si supravietuieste repornirii Broker-ului.
+  bool is_persistent = 6;
+}

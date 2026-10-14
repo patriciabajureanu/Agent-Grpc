@@ -1,15 +1,17 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 option csharp_namespace = "GrpcAgent";
 
 package GrpcAgent;
 
+import "Protos/news.proto";
+
 service Notifier {
-  rpc Notify ( NotifyRequest) returns (NotifyReply);
+  rpc Notify (NotifyRequest) returns (NotifyReply);
 }
 
 message NotifyRequest {
-  string content = 1;
+  News news = 1;
 }
 
 message NotifyReply {

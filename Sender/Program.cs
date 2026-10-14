@@ -16,34 +16,47 @@ namespace Sender
 
                while(true)
                {
-                    Console.Write("Enter the topic: ");
+                    Console.Write("Enter the news category (e.g. sport, tech): ");
                     var input = Console.ReadLine();
                     if (input is null)
                     {
                          break;
                     }
 
-                    var topic = input.Trim().ToLowerInvariant();
-                    if (string.IsNullOrWhiteSpace(topic))
+                    var category = input.Trim().ToLowerInvariant();
+                    if (string.IsNullOrWhiteSpace(category))
                     {
-                         Console.WriteLine("Invalid topic.");
+                         Console.WriteLine("Invalid category.");
                          continue;
                     }
 
+                    Console.Write("Enter title: ");
+                    var title = Console.ReadLine();
                     Console.Write("Enter content: ");
                     var content = Console.ReadLine();
-                    if (content is null)
+                    Console.Write("Persistent? (y/N): ");
+                    var persistent = Console.ReadLine();
+                    if (title is null || content is null || persistent is null)
                     {
                          break;
                     }
 
-                    var request = new PublishRequest() { Topic = topic, Content = content };
+                    var request = new PublishRequest()
+                    {
+                         News = new News()
+                         {
+                              Category = category,
+                              Title = title.Trim(),
+                              Content = content,
+                              IsPersistent = persistent.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
+                         }
+                    };
 
                     try
                     {
                          var reply = await client.PublishMessageAsync(request,
                               deadline: DateTime.UtcNow.AddSeconds(5));
-                         Console.WriteLine($"Publish Reply: {reply.IsSuccess}");
+                         Console.WriteLine($"Publish Reply: {reply.IsSuccess} (id {reply.Id})");
                     }
                     catch (Exception e)
                     {

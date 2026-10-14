@@ -1,18 +1,21 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 option csharp_namespace = "GrpcAgent";
 
 package GrpcAgent;
 
+import "Protos/news.proto";
+
 service Publisher {
   rpc PublishMessage (PublishRequest) returns (PublishReply);
 }
 
+// Sender completeaza category, title, content si is_persistent; Broker atribuie id si published_at.
 message PublishRequest {
-  string topic = 1;
-  string content = 2;
+  News news = 1;
 }
 
 message PublishReply {
   bool isSuccess = 1;
+  string id = 2;
 }

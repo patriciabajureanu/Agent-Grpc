@@ -1,4 +1,4 @@
-﻿using Broker.Services.Interfaces;
+using Broker.Services.Interfaces;
 using Grpc.Core;
 using GrpcAgent;
 
@@ -23,21 +23,21 @@ namespace Broker.Services
                do
                {
                     while (!stoppingToken.IsCancellationRequested
-                         && _messageStorage.GetNext() is { } message)
+                         && _messageStorage.GetNext() is { } news)
                     {
-                         var connections = _connectionStorage.GetConnectionsByTopic(message.Topic);
+                         var connections = _connectionStorage.GetConnectionsByCategory(news.Category);
 
                          foreach (var connection in connections)
                          {
                               var client = new Notifier.NotifierClient(connection.Channel);
-                              var request = new NotifyRequest() { Content = message.Content };
+                              var request = new NotifyRequest() { News = news };
 
                               try
                               {
                                    var reply = await client.NotifyAsync(request,
                                         deadline: DateTime.UtcNow.AddSeconds(5),
                                         cancellationToken: stoppingToken);
-                                   Console.WriteLine($"Notified subscriber {connection.Address} with {message.Content}. Response: {reply.IsSuccess}");
+                                   Console.WriteLine($"Notified subscriber {connection.Address} with {news.Id}. Response: {reply.IsSuccess}");
                               }
                               catch (RpcException) when (stoppingToken.IsCancellationRequested)
                               {

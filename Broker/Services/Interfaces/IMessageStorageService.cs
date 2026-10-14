@@ -1,12 +1,12 @@
-﻿using Broker.Models;
+using GrpcAgent;
 
 namespace Broker.Services.Interfaces
 {
      public interface IMessageStorageService
      {
-          void Add(Message message);
+          void Add(News news);
 
-          Message? GetNext();
+          News? GetNext();
 
           bool IsEmpty();
 

@@ -1,18 +1,17 @@
-﻿using System.Threading.Channels;
 using Grpc.Net.Client;
 
 namespace Broker.Models
 {
      public class Connection
      {
-          public Connection(string address, string topic)
+          public Connection(string address, string category)
           {
                Address = address;
-               Topic = topic;
+               Category = category;
                Channel = GrpcChannel.ForAddress(address);
           }
           public string Address { get; }
-          public string Topic { get; }
+          public string Category { get; }
 
           public GrpcChannel Channel { get; }
      }

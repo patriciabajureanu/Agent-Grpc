@@ -16,25 +16,25 @@ namespace Broker.Services
           }
           public override Task<SubscribeReply> Subscribe(SubscribeRequest request, ServerCallContext context)
           {
-               if (string.IsNullOrWhiteSpace(request.Topic)
+               if (string.IsNullOrWhiteSpace(request.Category)
                     || !Uri.TryCreate(request.Address, UriKind.Absolute, out var address)
                     || address.Scheme != Uri.UriSchemeHttps
                     || string.IsNullOrEmpty(address.Host))
                {
                     throw new RpcException(new Status(StatusCode.InvalidArgument,
-                         "A topic and a valid HTTPS receiver address are required."));
+                         "A category and a valid HTTPS receiver address are required."));
                }
 
-               Console.WriteLine($"New client trying to subscribe: {request.Address} {request.Topic}");
+               Console.WriteLine($"New client trying to subscribe: {request.Address} {request.Category}");
 
                try
                {
-                    var connection = new Connection(request.Address, request.Topic.Trim().ToLowerInvariant());
+                    var connection = new Connection(request.Address, request.Category.Trim().ToLowerInvariant());
                     _connectionStorage.Add(connection);
                }
                catch (Exception e)
                {
-                    Console.WriteLine($"Could not add the new connection {request.Address} {request.Topic} {e.Message}");
+                    Console.WriteLine($"Could not add the new connection {request.Address} {request.Category} {e.Message}");
                     return Task.FromResult(new SubscribeReply() { IsSuccess = false });
                }
 

@@ -51,18 +51,18 @@ namespace Receiver
 
                Console.WriteLine($"Subscriber listening at: {address}");
 
-               Console.Write("Enter the topic: ");
-               var topic = Console.ReadLine()?.Trim().ToLowerInvariant();
+               Console.Write("Enter the news category (e.g. sport, tech): ");
+               var category = Console.ReadLine()?.Trim().ToLowerInvariant();
 
-               if (string.IsNullOrWhiteSpace(topic))
+               if (string.IsNullOrWhiteSpace(category))
                {
-                    Console.WriteLine("Invalid topic.");
+                    Console.WriteLine("Invalid category.");
                     return;
                }
 
                var request = new SubscribeRequest()
                {
-                    Topic = topic,
+                    Category = category,
                     Address = address
                };
 

@@ -1,4 +1,4 @@
-﻿using Grpc.Core;
+using Grpc.Core;
 using GrpcAgent;
 
 namespace Receiver.Services
@@ -7,8 +7,15 @@ namespace Receiver.Services
      {
           public override Task<NotifyReply> Notify(NotifyRequest request, ServerCallContext context)
           {
-               Console.WriteLine($"Received: {request.Content}");
-               return Task.FromResult( new NotifyReply() { IsSuccess = true });
+               var news = request.News;
+               if (news is null)
+               {
+                    throw new RpcException(new Status(StatusCode.InvalidArgument, "News is required."));
+               }
+
+               Console.WriteLine($"[{news.Category}] {news.Title} ({news.PublishedAt.ToDateTime():u}, {(news.IsPersistent ? "persistent" : "transient")})");
+               Console.WriteLine($"    {news.Content}");
+               return Task.FromResult(new NotifyReply() { IsSuccess = true });
           }
      }
 }

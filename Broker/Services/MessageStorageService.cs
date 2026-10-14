@@ -1,27 +1,27 @@
-﻿using System.Collections.Concurrent;
-using Broker.Models;
+using System.Collections.Concurrent;
+using GrpcAgent;
 using Broker.Services.Interfaces;
 
 namespace Broker.Services
 {
      public class MessageStorageService : IMessageStorageService
      {
-          private readonly ConcurrentQueue<Message> _messages;
+          private readonly ConcurrentQueue<News> _messages;
 
           public MessageStorageService()
           {
-               _messages = new ConcurrentQueue<Message>();
+               _messages = new ConcurrentQueue<News>();
           }
-          public void Add(Message message)
+          public void Add(News news)
           {
-               _messages.Enqueue(message);
+               _messages.Enqueue(news);
           }
 
-          public Message? GetNext()
+          public News? GetNext()
           {
-               _messages.TryDequeue(out var message);
+               _messages.TryDequeue(out var news);
 
-               return message;
+               return news;
           }
 
           public bool IsEmpty()
