@@ -1,46 +1,147 @@
 # Agent-Grpc
 
-Agent de stiri publish/subscribe prin gRPC peste HTTPS, cu cinci proiecte:
+Agent de mesagerie (message broker) pentru stiri, realizat cu gRPC peste HTTPS.
+Un **Sender** publica stiri intr-o categorie (de exemplu `sport`), **Broker**-ul
+le pastreaza si le ruteaza, iar fiecare **Receiver** abonat la categoria
+respectiva le primeste. Sender-ul si Receiver-ul nu se cunosc intre ei: comunica
+doar cu Broker-ul (sablonul Publisher/Subscriber).
 
-- **Broker** primeste stirile si le transmite abonatilor categoriei; stirile
-  persistente neconsumate sunt salvate periodic pe disc si restaurate la pornire.
-- **Sender** publica stiri (categorie, titlu, continut, persistenta) din consola.
-- **Receiver** se aboneaza la o categorie de stiri si afiseaza stirile primite.
-- **Common** contine contractele Protobuf (`Common/Protos`) si adresele comune.
-- **Broker.Tests** contine testele pentru backup si restaurare.
+Pe langa fluxul nominal, sistemul trateaza explicit situatiile in care ceva
+esueaza: raspunsuri pierdute, caderea Broker-ului, caderea unui consumator
+inainte de confirmare si mesaje care nu pot fi procesate.
+
+## Arhitectura
+
+```mermaid
+flowchart LR
+    S[Sender<br/>consola] -- "Publisher.PublishMessage<br/>GetNewsStatus" --> B
+    R1[Receiver sport] -- Subscriber.Subscribe --> B
+    R2[Receiver tech] -- Subscriber.Subscribe --> B
+    subgraph B[Broker]
+        P[PublisherService<br/>validare + deduplicare] --> Q[(MessageStorage<br/>coada + stari)]
+        W[SenderWorker<br/>livrare, retry, dead-letter] --> Q
+        PW[PersistenceWorker<br/>backup / restaurare] --> Q
+    end
+    W -- "Notifier.Notify<br/>ACK / NACK" --> R1
+    W -- "Notifier.Notify" --> R2
+    PW <--> F1[(news-backup.json)]
+    W --> F2[(dead-letter.jsonl)]
+    R1 --> J1[(received-sport.jsonl)]
+```
+
+| Proiect | Rol |
+|---|---|
+| `Common` | Contractele Protobuf (`Common/Protos`), constantele contractului, politica de retry, numele evenimentelor de log. |
+| `Broker` | Serviciile gRPC `Publisher` si `Subscriber`, stocarea stirilor, livrarea (`SenderWorker`), persistenta (`PersistenceWorker`), health checks. |
+| `Sender` | Aplicatie de consola care publica stiri si interogheaza starea lor. |
+| `Receiver` | Se aboneaza la o categorie, expune serviciul `Notifier`, scrie stirile primite in jurnal si le afiseaza. |
+| `Broker.Tests`, `Receiver.Tests` | Teste unitare, de contract, de integrare si pentru scenariile de esec. |
+
+### Fluxul unei stiri
+
+```mermaid
+sequenceDiagram
+    participant S as Sender
+    participant B as Broker
+    participant R as Receiver
+    S->>B: PublishMessage(news, message_id, correlation_id)
+    B-->>S: OK (message_id, duplicate=false)
+    Note over S,B: raspuns pierdut -> Sender repeta cu acelasi message_id -> duplicate=true
+    loop la fiecare 2 s, pana la ACK
+        B->>R: Notify(news) + header x-correlation-id
+        R->>R: scrie stirea in jurnal (efect + deduplicare)
+        R-->>B: ACK / NACK_RETRY / NACK_REJECT
+    end
+    Note over B: NACK_RETRY: backoff exponential + jitter<br/>dupa MaxAttempts sau NACK_REJECT -> dead-letter.jsonl
+    S->>B: GetNewsStatus(message_id)
+    B-->>S: Pending / Delivered / DeadLettered
+```
+
+## Contractul (`Common/Protos`, pachetul `agent.v1`)
+
+Fiecare stire (`News`, `news.proto`) contine plicul comun:
+
+| Camp | Semnificatie |
+|---|---|
+| `message_id` | GUID generat de Sender; identificator stabil si cheie de idempotenta. |
+| `correlation_id` | Generat de Sender, propagat neschimbat de toate componentele si in header-ul `x-correlation-id`. |
+| `message_type` | `news.published`. |
+| `schema_version` | `1`. |
+| `occurred_at` | Momentul acceptarii de catre Broker, UTC. |
+| `category`, `title`, `content` | Continutul stirii; `category` este cheia de rutare. |
+| `is_persistent` | `true`: stirea este salvata pe disc si supravietuieste repornirii Broker-ului. |
+
+Servicii:
+
+- `Publisher.PublishMessage`, `Publisher.GetNewsStatus` (`publish.proto`)
+- `Subscriber.Subscribe` (`subscribe.proto`)
+- `Notifier.Notify` (`notify.proto`), implementat de Receiver; raspunde cu `AckStatus`
+
+Semantica erorilor la publicare face parte din contract:
+
+| Cod gRPC | Cand | Se reincearca? |
+|---|---|---|
+| `INVALID_ARGUMENT` | campuri lipsa, `message_id` care nu este GUID, `message_type` gresit | nu |
+| `FAILED_PRECONDITION` | `schema_version` nesuportata | nu |
+| `ALREADY_EXISTS` | `message_id` refolosit pentru o stire cu alt continut | nu |
+| `UNAVAILABLE`, `DEADLINE_EXCEEDED` | Broker indisponibil sau lent | da, cu acelasi `message_id` |
+
+Reguli de compatibilitate: numerele campurilor nu se schimba si nu se refolosesc,
+campurile noi primesc numere noi, iar consumatorii ignora campurile necunoscute
+(Broker-ul le pastreaza si le transmite mai departe). O schimbare incompatibila
+inseamna pachetul `agent.v2`. Regulile sunt verificate de `ContractTests`.
+
+## Garantii si limite
+
+| Garantie | Mecanism |
+|---|---|
+| Livrare cel putin o data | Broker-ul pastreaza stirea pana la ACK. |
+| Efect aplicat o singura data la consumator | Jurnalul Receiver-ului este si efectul, si evidenta stirilor procesate. |
+| Publicare idempotenta | Deduplicare dupa `message_id` (fereastra de o ora). |
+| Nicio reincercare infinita | Sender: maximum 4 incercari. Broker: `Delivery:MaxAttempts` (implicit 5), apoi dead-letter. |
+| Deadline explicit la fiecare apel | 5 s pentru publicare, abonare si notificare. |
+| Stirile persistente supravietuiesc repornirii | Backup la 5 s, restaurat la pornire. |
+
+Limite cunoscute:
+
+- Stirile persistente primite in ultimele cel mult 5 s inainte de o cadere se
+  pot pierde. Stirile tranzitorii se pierd la orice repornire a Broker-ului.
+- Abonamentele sunt doar in memorie: dupa repornirea Broker-ului, Receiver-ii
+  trebuie reporniti.
+- O stire este considerata livrata cand cel putin un abonat al categoriei a
+  confirmat-o.
+- Ordinea nu este garantata dupa reincercari (`occurred_at` permite sortarea).
+- Deduplicarea din Broker este doar in memorie; dupa repornire, duplicatul este
+  oprit de jurnalul Receiver-ului.
+- Certificatul HTTPS de dezvoltare este valabil doar pentru `localhost`.
+
+Detalii si justificari: [docs/adr](docs/adr).
 
 ## Cerinte
 
-- .NET SDK 8.0 sau un SDK mai nou care poate compila `net8.0`.
-- Runtime-urile .NET 8 si ASP.NET Core 8 pentru rulare (incluse in SDK 8).
-- Git si acces la NuGet pentru restaurarea pachetelor.
+- .NET SDK 8.0 sau mai nou (proiectele tintesc `net8.0`).
 - Certificatul HTTPS de dezvoltare .NET, de incredere (o singura data pe calculator):
 
   ```powershell
   dotnet dev-certs https --trust
   ```
-- Optional: Visual Studio 2022 cu suport pentru .NET 8.
 
-## Descarcare si compilare
-
-Versiunea completa cu Receiver se afla pe ramura `main`.
+## Compilare si teste
 
 ```powershell
-git clone --branch main https://github.com/patriciabajureanu/Agent-Grpc.git
+git clone https://github.com/patriciabajureanu/Agent-Grpc.git
 cd Agent-Grpc
-dotnet restore "Agent Grpc.sln"
 dotnet build "Agent Grpc.sln"
 dotnet test "Agent Grpc.sln"
 ```
 
-Pentru o copie existenta, salveaza modificarile proprii inainte de schimbarea
-ramurii, apoi foloseste `git fetch origin`, `git switch main` si
-`git pull --ff-only`.
+Testele pornesc Broker-ul si Receiver-ul in proces si nu au nevoie de porturi
+libere sau de certificat. GitHub Actions ruleaza compilarea (cu avertismentele
+tratate ca erori) si testele la fiecare push si pull request.
 
 ## Rulare locala
 
-Deschide trei terminale in directorul repository-ului. Porneste proiectele in
-ordinea urmatoare si lasa fiecare terminal deschis:
+Trei terminale, in directorul repository-ului, pornite in ordinea urmatoare:
 
 1. Broker:
 
@@ -48,68 +149,88 @@ ordinea urmatoare si lasa fiecare terminal deschis:
    dotnet run --project Broker --no-launch-profile
    ```
 
-2. Receiver:
+   Verificare: <https://localhost:5001/health/ready> raspunde `Healthy`.
+
+2. Receiver (se pot porni mai multe, pe categorii diferite):
 
    ```powershell
    dotnet run --project Receiver --no-launch-profile
    ```
 
-   Introdu o categorie, de exemplu `sport`. Asteapta `Subscribed reply: True`.
-   Apasarea Enter la mesajul de iesire inchide Receiver-ul.
+   Introdu categoria, de exemplu `sport`, si asteapta `Subscribed reply: True`.
+   Stirile primite apar in consola si in `Receiver/received-sport.jsonl`.
 
 3. Sender:
 
    ```powershell
-   dotnet run --project Sender
+   dotnet run --project Sender 2> sender.log
    ```
 
-   Introdu aceeasi categorie (`sport`), titlul, continutul si `y` daca stirea
-   este persistenta. Sender afiseaza `Publish Reply: True (id ...)`, iar
-   Receiver afiseaza `[sport] <titlu> ...` si continutul.
-   Livrarea este verificata de Broker la aproximativ doua secunde.
+   Introdu categoria, titlul, continutul si `y` daca stirea este persistenta.
+   Sender afiseaza `Published news <id>`. Comanda `status`, urmata de id,
+   afiseaza starea stirii (`Pending`, `Delivered`, `DeadLettered`). Log-urile
+   JSON ale Sender-ului merg pe stderr (aici in `sender.log`).
 
-Poti porni mai multe instante Receiver, inclusiv pe categorii diferite.
+Scenariile de esec (Broker oprit fortat, consumator care esueaza, raspuns
+pierdut) se reproduc dupa pasii din [docs/failure-scenarios.md](docs/failure-scenarios.md).
 
-### Verificarea persistentei
+## Configurare
 
-1. Publica o stire persistenta (`y`) intr-o categorie fara abonati, de exemplu `tech`.
-2. Asteapta cel putin 5 secunde: stirea apare in `Broker/news-backup.json`.
-3. Opreste Broker (chiar fortat, din Task Manager) si porneste-l din nou: in
-   consola apare `Restored 1 persistent news from news-backup.json`.
-4. Porneste un Receiver pe `tech`: stirea este livrata, apoi dispare din backup.
-Pentru oprirea proceselor foloseste Ctrl+C.
+Valorile implicite sunt in `Broker/appsettings.json`. `dotnet run --project` porneste procesul
+in directorul proiectului, deci `news-backup.json` si `dead-letter.jsonl` apar in
+`Broker/`, iar `received-*.jsonl` in `Receiver/`. Toate sunt excluse din git. Toate pot fi schimbate
+prin variabile de mediu, fara recompilare; lista completa este in
+[.env.example](.env.example).
 
-## Configurare si limite
+| Variabila | Implicit | Efect |
+|---|---|---|
+| `BROKER_ADDRESS` | `https://localhost:5001` | Adresa Broker-ului |
+| `RECEIVER_JOURNAL` | `received-<categorie>.jsonl` | Jurnalul Receiver-ului |
+| `Persistence__IntervalSeconds` | `5` | Intervalul backup-ului |
+| `Delivery__MaxAttempts` | `5` | Incercari de livrare inainte de dead-letter |
+| `Delivery__BaseDelayMs` / `Delivery__MaxDelayMs` | `1000` / `30000` | Backoff-ul intre incercari |
+| `Delivery__DeadLetterPath` | `dead-letter.jsonl` | Fisierul dead-letter |
 
-- Broker asculta pe `https://localhost:5001`.
-- Receiver foloseste un port local liber, atribuit automat, si comunica adresa
-  `https://localhost:<port>` catre Broker la abonare. Broker accepta doar adrese HTTPS.
-- Adresele sunt definite in `Common/EndpointsConstants.cs`; Broker si Receiver
-  folosesc HTTP/2 peste TLS, configurat in fisierele `appsettings.json`.
-  Certificatul de dezvoltare este valabil doar pentru `localhost`.
-- Configuratia implicita este pentru procese care ruleaza pe acelasi calculator.
-  Pentru calculatoare diferite trebuie configurate adrese accesibile intre ele.
-- O stire ramane in Broker pana cand este livrata cu succes cel putin unui
-  abonat al categoriei; pana atunci este reincercata la fiecare doua secunde.
-- Stirile persistente neconsumate sunt salvate la fiecare 5 secunde (si la
-  oprirea normala) in `Broker/news-backup.json`, configurabil prin sectiunea
-  `Persistence` din `Broker/appsettings.json`. Stirile tranzitorii raman doar in
-  memorie si se pierd la oprirea Broker. Un backup stricat este redenumit
-  `news-backup.json.corrupt`, iar Broker porneste fara el.
-- Livrarea este "cel putin o data": stirile primite in ultimele 5 secunde
-  inainte de o cadere pot fi pierdute, iar o stire livrata chiar inainte de
-  cadere poate fi livrata din nou dupa repornire.
-- Abonamentele sunt pastrate doar in memorie. Dupa repornirea Broker,
-  reporneste Receiver pentru a recrea abonamentul.
-- Daca Broker nu ruleaza sau portul 5001 este ocupat, rezolva problema inainte
-  de abonare/publicare. Un Receiver care nu mai este disponibil este eliminat
-  din abonamente cand livrarea esueaza cu `Unavailable`.
+Proiectul nu foloseste secrete; certificatul HTTPS se afla in magazinul de
+certificate al utilizatorului.
 
-## Colaborare
+## Health checks
 
-Creeaza o ramura proprie pornind de la `main`, salveaza modificarile
-prin commit si deschide un pull request catre `main`. Nu adauga `bin/`, `obj/`, `.vs/`,
-fisiere `*.user` sau secrete; acestea sunt excluse prin `.gitignore`.
+| Endpoint | Raspuns |
+|---|---|
+| `GET /health/live` | `Healthy` cat timp procesul raspunde. |
+| `GET /health/ready` | `Unhealthy` cat timp backup-ul este restaurat, `Degraded` daca backup-ul nu poate fi scris, altfel `Healthy`. |
 
-Workflow-ul GitHub Actions compileaza solutia in Release la push si pull request,
-tratand avertismentele de compilare ca erori, si ruleaza testele.
+## Log-uri
+
+Broker, Receiver si Sender scriu cate o linie JSON per eveniment, cu:
+`Timestamp` (UTC), `LogLevel`, `Category` (componenta), `EventId`, `Message`,
+campurile structurate (`Result`, `DurationMs`, `Subscriber`, ...) si, in
+`Scopes`, `CorrelationId` si `MessageId`. Dupa `CorrelationId` se poate urmari
+aceeasi stire in toate componentele.
+
+| EventId | Eveniment | | EventId | Eveniment |
+|---|---|---|---|---|
+| 1001 | `news.accepted` | | 1303 | `backup.restored` |
+| 1002 | `news.duplicate` | | 1304 | `backup.corrupt` |
+| 1003 | `news.rejected` | | 1401 | `news.received` |
+| 1101 | `subscriber.added` | | 1402 | `news.received_duplicate` |
+| 1102 | `subscriber.removed` | | 1403 | `news.received_rejected` |
+| 1201 | `news.notified` | | 1404 | `journal.unavailable` |
+| 1202 | `news.delivery_failed` | | 1501 | `publish.succeeded` |
+| 1203 | `news.dead_lettered` | | 1502 | `publish.retry` |
+| 1302 | `backup.failed` | | 1503 | `publish.failed` |
+
+## Structura repository-ului
+
+```text
+Common/Protos/        contractele agent.v1 (news, publish, subscribe, notify, broker_storage)
+Broker/Services/      PublisherService, SubscriberService, SenderWorker, PersistenceWorker, health check
+Broker/Models/        Connection, StoredNews
+Receiver/Services/    NotificationService, NewsJournal
+Sender/Program.cs     publicare cu retry, comanda status
+Broker.Tests/         teste de contract, stocare, retry, persistenta, integrare
+Receiver.Tests/       teste pentru jurnalul de deduplicare
+docs/adr/             deciziile arhitecturale
+docs/failure-scenarios.md   scenariile de esec, cu dovezi
+```
