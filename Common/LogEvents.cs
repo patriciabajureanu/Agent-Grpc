@@ -30,10 +30,15 @@ namespace Common
           public static readonly EventId PublishFailed = new(1503, "publish.failed");
 
           // Campurile comune adaugate fiecarei linii de log dintr-un flux.
-          public static Dictionary<string, object> Scope(string correlationId, string messageId) => new()
+          public static LogScope Scope(string correlationId, string messageId) => new()
           {
                ["CorrelationId"] = correlationId,
                ["MessageId"] = messageId
           };
+     }
+
+     public sealed class LogScope : Dictionary<string, object>
+     {
+          public override string ToString() => string.Join(" ", this.Select(x => $"{x.Key}:{x.Value}"));
      }
 }
