@@ -1,32 +1,37 @@
 using System.Collections.Concurrent;
-using GrpcAgent;
 using Broker.Services.Interfaces;
+using GrpcAgent;
 
 namespace Broker.Services
 {
      public class MessageStorageService : IMessageStorageService
      {
-          private readonly ConcurrentQueue<News> _messages;
+          // Coada da ordinea de livrare; dictionarul tine tot ce nu a fost livrat inca, inclusiv stirile scoase din coada.
+          private readonly ConcurrentQueue<News> _queue;
+          private readonly ConcurrentDictionary<string, News> _unconsumed;
 
           public MessageStorageService()
           {
-               _messages = new ConcurrentQueue<News>();
+               _queue = new ConcurrentQueue<News>();
+               _unconsumed = new ConcurrentDictionary<string, News>();
           }
+
           public void Add(News news)
           {
-               _messages.Enqueue(news);
+               _unconsumed[news.Id] = news;
+               _queue.Enqueue(news);
           }
 
           public News? GetNext()
           {
-               _messages.TryDequeue(out var news);
+               _queue.TryDequeue(out var news);
 
                return news;
           }
 
-          public bool IsEmpty()
+          public void MarkConsumed(string id)
           {
-               return _messages.IsEmpty;
+               _unconsumed.TryRemove(id, out _);
           }
      }
 }

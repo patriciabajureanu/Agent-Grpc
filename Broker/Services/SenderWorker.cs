@@ -22,9 +22,13 @@ namespace Broker.Services
 
                do
                {
+                    // Stirile fara niciun abonat care le-a primit raman in storage si sunt reincercate la urmatorul tick.
+                    var undelivered = new List<News>();
+
                     while (!stoppingToken.IsCancellationRequested
                          && _messageStorage.GetNext() is { } news)
                     {
+                         var delivered = false;
                          var connections = _connectionStorage.GetConnectionsByCategory(news.Category);
 
                          foreach (var connection in connections)
@@ -37,10 +41,12 @@ namespace Broker.Services
                                    var reply = await client.NotifyAsync(request,
                                         deadline: DateTime.UtcNow.AddSeconds(5),
                                         cancellationToken: stoppingToken);
+                                   delivered |= reply.IsSuccess;
                                    Console.WriteLine($"Notified subscriber {connection.Address} with {news.Id}. Response: {reply.IsSuccess}");
                               }
                               catch (RpcException) when (stoppingToken.IsCancellationRequested)
                               {
+                                   _messageStorage.Add(news);
                                    return;
                               }
                               catch (RpcException exception)
@@ -56,7 +62,18 @@ namespace Broker.Services
                                    Console.WriteLine($"Error notifying subscriber {connection.Address}. {exception.Message}");
                               }
                          }
+
+                         if (delivered)
+                         {
+                              _messageStorage.MarkConsumed(news.Id);
+                         }
+                         else
+                         {
+                              undelivered.Add(news);
+                         }
                     }
+
+                    undelivered.ForEach(_messageStorage.Add);
                } while (await timer.WaitForNextTickAsync(stoppingToken));
           }
      }

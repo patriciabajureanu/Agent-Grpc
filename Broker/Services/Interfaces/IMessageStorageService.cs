@@ -4,11 +4,13 @@ namespace Broker.Services.Interfaces
 {
      public interface IMessageStorageService
      {
+          // Adauga stirea in coada de livrare; o stire deja cunoscuta (acelasi id) este doar repusa in coada.
           void Add(News news);
 
           News? GetNext();
 
-          bool IsEmpty();
+          // Stirea a fost livrata: nu mai este pastrata.
+          void MarkConsumed(string id);
 
      }
 }
