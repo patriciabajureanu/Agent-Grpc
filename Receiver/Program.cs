@@ -1,5 +1,4 @@
 
-using Broker;
 using Common;
 using Grpc.Net.Client;
 using GrpcAgent;
@@ -18,7 +17,7 @@ namespace Receiver
                    "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport",
                    true);
 
-               var host = WebHost.CreateDefaultBuilder(args)
+               using var host = WebHost.CreateDefaultBuilder(args)
                    .ConfigureLogging(logging =>
                    {
                         logging.ClearProviders();
@@ -36,6 +35,7 @@ namespace Receiver
 
                Console.WriteLine("Press enter to exit");
                Console.ReadLine();
+               host.StopAsync().GetAwaiter().GetResult();
           }
 
           private static void Subscribe(IWebHost host)
@@ -47,12 +47,13 @@ namespace Receiver
 
                var address = host.ServerFeatures
                    .Get<IServerAddressesFeature>()
-                   .Addresses.First();
+                   ?.Addresses.FirstOrDefault()
+                   ?? throw new InvalidOperationException("Receiver has no listening address.");
 
                Console.WriteLine($"Subscriber listening at: {address}");
 
                Console.Write("Enter the topic: ");
-               var topic = Console.ReadLine()?.ToLowerInvariant();
+               var topic = Console.ReadLine()?.Trim().ToLowerInvariant();
 
                if (string.IsNullOrWhiteSpace(topic))
                {
@@ -68,7 +69,7 @@ namespace Receiver
 
                try
                {
-                    var reply = client.Subscribe(request);
+                    var reply = client.Subscribe(request, deadline: DateTime.UtcNow.AddSeconds(5));
                     Console.WriteLine($"Subscribed reply: {reply.IsSuccess}");
                }
                catch (Exception e)

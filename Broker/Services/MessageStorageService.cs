@@ -17,10 +17,9 @@ namespace Broker.Services
                _messages.Enqueue(message);
           }
 
-          public Message GetNext()
+          public Message? GetNext()
           {
-               Message message;
-               _messages.TryDequeue(out message);
+               _messages.TryDequeue(out var message);
 
                return message;
           }

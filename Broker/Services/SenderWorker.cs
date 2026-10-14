@@ -1,45 +1,29 @@
-﻿
-using Broker.Services.Interfaces;
+﻿using Broker.Services.Interfaces;
 using Grpc.Core;
 using GrpcAgent;
 
 namespace Broker.Services
 {
-     public class SenderWorker : IHostedService
+     public class SenderWorker : BackgroundService
      {
-          private Timer _timer;
-          private const int TimeToWait = 2000;
           private readonly IMessageStorageService _messageStorage;
           private readonly IConnectionStorageService _connectionStorage;
 
-          public SenderWorker(IServiceScopeFactory serviceScopeFactory)
+          public SenderWorker(IMessageStorageService messageStorage,
+               IConnectionStorageService connectionStorage)
           {
-               using (var scope = serviceScopeFactory.CreateScope())
+               _messageStorage = messageStorage;
+               _connectionStorage = connectionStorage;
+          }
+
+          protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+          {
+               using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+
+               do
                {
-                    _messageStorage = scope.ServiceProvider.GetRequiredService<IMessageStorageService>();
-                    _connectionStorage = scope.ServiceProvider.GetRequiredService<IConnectionStorageService>();
-
-               }
-          }
-          public Task StartAsync(CancellationToken cancellationToken)
-          {
-               _timer = new Timer(DoSendWork, null, 0, TimeToWait);
-               return Task.CompletedTask;
-          }
-
-          public Task StopAsync(CancellationToken cancellationToken)
-          {
-               _timer?.Change(Timeout.Infinite, 0);
-               return Task.CompletedTask;
-          }
-
-          private void DoSendWork(object state)
-          {
-               while (!_messageStorage.IsEmpty())
-               {
-                    var message = _messageStorage.GetNext();
-
-                    if (message != null)
+                    while (!stoppingToken.IsCancellationRequested
+                         && _messageStorage.GetNext() is { } message)
                     {
                          var connections = _connectionStorage.GetConnectionsByTopic(message.Topic);
 
@@ -50,29 +34,30 @@ namespace Broker.Services
 
                               try
                               {
-                                   var reply = client.Notify(request);
+                                   var reply = await client.NotifyAsync(request,
+                                        deadline: DateTime.UtcNow.AddSeconds(5),
+                                        cancellationToken: stoppingToken);
                                    Console.WriteLine($"Notified subscriber {connection.Address} with {message.Content}. Response: {reply.IsSuccess}");
                               }
-                              catch (RpcException rpcException)
+                              catch (RpcException) when (stoppingToken.IsCancellationRequested)
                               {
-                                   if (rpcException.StatusCode == StatusCode.Internal)
+                                   return;
+                              }
+                              catch (RpcException exception)
+                              {
+                                   if (exception.StatusCode == StatusCode.Unavailable)
                                    {
                                         _connectionStorage.Remove(connection.Address);
                                    }
-                                   Console.WriteLine($"RPC Error notifying subscriber {connection.Address}. {rpcException.Message}");
+                                   Console.WriteLine($"RPC Error notifying subscriber {connection.Address}. {exception.Message}");
                               }
                               catch (Exception exception)
                               {
                                    Console.WriteLine($"Error notifying subscriber {connection.Address}. {exception.Message}");
                               }
                          }
-
-
                     }
-
-
-               }
-
+               } while (await timer.WaitForNextTickAsync(stoppingToken));
           }
      }
 }

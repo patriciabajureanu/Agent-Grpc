@@ -12,22 +12,38 @@ namespace Sender
                Console.WriteLine("Publisher");
 
                AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
-               var channel = GrpcChannel.ForAddress(EndpointsConstants.BrokerAddress);
+               using var channel = GrpcChannel.ForAddress(EndpointsConstants.BrokerAddress);
                var client = new Publisher.PublisherClient(channel);
 
                while(true)
                {
                     Console.Write("Enter the topic: ");
-                    var topic = Console.ReadLine().ToLower();
+                    var input = Console.ReadLine();
+                    if (input is null)
+                    {
+                         break;
+                    }
+
+                    var topic = input.Trim().ToLowerInvariant();
+                    if (string.IsNullOrWhiteSpace(topic))
+                    {
+                         Console.WriteLine("Invalid topic.");
+                         continue;
+                    }
 
                     Console.Write("Enter content: ");
                     var content = Console.ReadLine();
+                    if (content is null)
+                    {
+                         break;
+                    }
 
                     var request = new PublishRequest() { Topic = topic, Content = content };
 
                     try
                     {
-                         var reply = await client.PublishMessageAsync(request);
+                         var reply = await client.PublishMessageAsync(request,
+                              deadline: DateTime.UtcNow.AddSeconds(5));
                          Console.WriteLine($"Publish Reply: {reply.IsSuccess}");
                     }
                     catch (Exception e)

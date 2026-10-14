@@ -35,7 +35,10 @@ namespace Broker.Services
 
           public void Remove(string address)
           {
-               _connections.RemoveAll(x => x.Address == address);
+               lock (_locker)
+               {
+                    _connections.RemoveAll(x => x.Address == address);
+               }
           }
      }
 }

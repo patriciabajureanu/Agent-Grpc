@@ -6,7 +6,7 @@ namespace Broker.Services.Interfaces
      {
           void Add(Message message);
 
-          Message GetNext();
+          Message? GetNext();
 
           bool IsEmpty();
 

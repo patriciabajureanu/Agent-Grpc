@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Receiver.Services;
 
-namespace Broker
+namespace Receiver
 {
      public class Startup
      {

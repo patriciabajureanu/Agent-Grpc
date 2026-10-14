@@ -14,9 +14,15 @@ namespace Broker.Services
           }
           public override Task<PublishReply> PublishMessage(PublishRequest request, ServerCallContext context)
           {
-               Console.WriteLine($"Recieved: {request.Topic} {request.Content}");
+               if (string.IsNullOrWhiteSpace(request.Topic))
+               {
+                    throw new RpcException(new Status(StatusCode.InvalidArgument, "Topic is required."));
+               }
 
-               var message = new Message(request.Topic, request.Content);
+               var topic = request.Topic.Trim().ToLowerInvariant();
+               Console.WriteLine($"Received: {topic} {request.Content}");
+
+               var message = new Message(topic, request.Content);
                _messageStorage.Add(message);
 
                return Task.FromResult(new PublishReply()
