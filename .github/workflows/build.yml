@@ -19,3 +19,5 @@ jobs:
         run: dotnet restore "Agent Grpc.sln"
       - name: Build solution
         run: dotnet build "Agent Grpc.sln" --configuration Release --no-restore --warnaserror
+      - name: Run tests
+        run: dotnet test "Agent Grpc.sln" --configuration Release --no-build
