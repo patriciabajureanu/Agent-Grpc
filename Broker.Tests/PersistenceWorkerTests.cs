@@ -18,7 +18,7 @@ namespace Broker.Tests
 
           private static News CreateNews(string title, bool isPersistent) => new()
           {
-               Id = Guid.NewGuid().ToString(),
+               MessageId = Guid.NewGuid().ToString(),
                Category = "sport",
                Title = title,
                Content = "content",
@@ -36,7 +36,7 @@ namespace Broker.Tests
                storage.Add(CreateNews("transient", isPersistent: false));
                // O stire scoasa din coada dar inca nelivrata trebuie sa ajunga totusi in backup.
                storage.GetNext();
-               storage.MarkConsumed(consumed.Id);
+               storage.MarkConsumed(consumed.MessageId);
 
                await CreateWorker(storage).BackupAsync(CancellationToken.None);
 

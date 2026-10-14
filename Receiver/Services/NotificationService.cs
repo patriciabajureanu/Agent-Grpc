@@ -13,8 +13,9 @@ namespace Receiver.Services
                     throw new RpcException(new Status(StatusCode.InvalidArgument, "News is required."));
                }
 
-               Console.WriteLine($"[{news.Category}] {news.Title} ({news.PublishedAt.ToDateTime():u}, {(news.IsPersistent ? "persistent" : "transient")})");
+               Console.WriteLine($"[{news.Category}] {news.Title} ({news.OccurredAt.ToDateTime():u}, {(news.IsPersistent ? "persistent" : "transient")})");
                Console.WriteLine($"    {news.Content}");
+               Console.WriteLine($"    id={news.MessageId} correlation={news.CorrelationId}");
                return Task.FromResult(new NotifyReply() { IsSuccess = true });
           }
      }

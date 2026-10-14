@@ -1,4 +1,5 @@
 using Broker.Services.Interfaces;
+using Common;
 using Grpc.Core;
 using GrpcAgent;
 
@@ -39,10 +40,11 @@ namespace Broker.Services
                               try
                               {
                                    var reply = await client.NotifyAsync(request,
+                                        new Metadata { { ContractConstants.CorrelationIdHeader, news.CorrelationId } },
                                         deadline: DateTime.UtcNow.AddSeconds(5),
                                         cancellationToken: stoppingToken);
                                    delivered |= reply.IsSuccess;
-                                   Console.WriteLine($"Notified subscriber {connection.Address} with {news.Id}. Response: {reply.IsSuccess}");
+                                   Console.WriteLine($"Notified subscriber {connection.Address} with {news.MessageId}. Response: {reply.IsSuccess}");
                               }
                               catch (RpcException) when (stoppingToken.IsCancellationRequested)
                               {
@@ -65,7 +67,7 @@ namespace Broker.Services
 
                          if (delivered)
                          {
-                              _messageStorage.MarkConsumed(news.Id);
+                              _messageStorage.MarkConsumed(news.MessageId);
                          }
                          else
                          {

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option csharp_namespace = "GrpcAgent";
 
-package GrpcAgent;
+package agent.v1;
 
 import "Protos/news.proto";
 

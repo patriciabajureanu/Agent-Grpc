@@ -1,6 +1,7 @@
 using System;
 using Grpc.Net.Client;
 using Common;
+using Grpc.Core;
 using GrpcAgent;
 
 namespace Sender
@@ -41,10 +42,15 @@ namespace Sender
                          break;
                     }
 
+                    var correlationId = Guid.NewGuid().ToString();
                     var request = new PublishRequest()
                     {
                          News = new News()
                          {
+                              MessageId = Guid.NewGuid().ToString(),
+                              CorrelationId = correlationId,
+                              MessageType = ContractConstants.NewsPublished,
+                              SchemaVersion = ContractConstants.SchemaVersion,
                               Category = category,
                               Title = title.Trim(),
                               Content = content,
@@ -55,8 +61,9 @@ namespace Sender
                     try
                     {
                          var reply = await client.PublishMessageAsync(request,
+                              new Metadata { { ContractConstants.CorrelationIdHeader, correlationId } },
                               deadline: DateTime.UtcNow.AddSeconds(5));
-                         Console.WriteLine($"Publish Reply: {reply.IsSuccess} (id {reply.Id})");
+                         Console.WriteLine($"Published news {reply.MessageId} (correlation {correlationId})");
                     }
                     catch (Exception e)
                     {

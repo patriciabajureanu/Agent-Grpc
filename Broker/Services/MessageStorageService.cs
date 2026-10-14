@@ -18,7 +18,7 @@ namespace Broker.Services
 
           public void Add(News news)
           {
-               _unconsumed[news.Id] = news;
+               _unconsumed[news.MessageId] = news;
                _queue.Enqueue(news);
           }
 

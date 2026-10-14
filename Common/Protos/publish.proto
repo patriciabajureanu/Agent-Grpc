@@ -2,20 +2,23 @@ syntax = "proto3";
 
 option csharp_namespace = "GrpcAgent";
 
-package GrpcAgent;
+package agent.v1;
 
 import "Protos/news.proto";
 
+// Semantica erorilor:
+// INVALID_ARGUMENT    - campuri lipsa sau invalide; nu se reincearca.
+// FAILED_PRECONDITION - schema_version nesuportata; nu se reincearca.
+// UNAVAILABLE, DEADLINE_EXCEEDED - se poate reincerca, cu acelasi message_id.
 service Publisher {
   rpc PublishMessage (PublishRequest) returns (PublishReply);
 }
 
-// Sender completeaza category, title, content si is_persistent; Broker atribuie id si published_at.
+// Sender completeaza tot plicul in afara de occurred_at, care este atribuit de Broker.
 message PublishRequest {
   News news = 1;
 }
 
 message PublishReply {
-  bool isSuccess = 1;
-  string id = 2;
+  string message_id = 1;
 }
