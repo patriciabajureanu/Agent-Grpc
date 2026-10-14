@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Grpc.Net.Client;
 using Common;
 using GrpcAgent;
@@ -11,7 +11,6 @@ namespace Sender
           {
                Console.WriteLine("Publisher");
 
-               AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
                using var channel = GrpcChannel.ForAddress(EndpointsConstants.BrokerAddress);
                var client = new Publisher.PublisherClient(channel);
 

@@ -1,4 +1,4 @@
-﻿using Broker.Models;
+using Broker.Models;
 using Broker.Services.Interfaces;
 using Grpc.Core;
 using GrpcAgent;
@@ -18,11 +18,11 @@ namespace Broker.Services
           {
                if (string.IsNullOrWhiteSpace(request.Topic)
                     || !Uri.TryCreate(request.Address, UriKind.Absolute, out var address)
-                    || (address.Scheme != Uri.UriSchemeHttp && address.Scheme != Uri.UriSchemeHttps)
+                    || address.Scheme != Uri.UriSchemeHttps
                     || string.IsNullOrEmpty(address.Host))
                {
                     throw new RpcException(new Status(StatusCode.InvalidArgument,
-                         "A topic and a valid HTTP(S) receiver address are required."));
+                         "A topic and a valid HTTPS receiver address are required."));
                }
 
                Console.WriteLine($"New client trying to subscribe: {request.Address} {request.Topic}");

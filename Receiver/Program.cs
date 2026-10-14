@@ -13,10 +13,6 @@ namespace Receiver
      {
           public static void Main(string[] args)
           {
-               AppContext.SetSwitch(
-                   "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport",
-                   true);
-
                using var host = WebHost.CreateDefaultBuilder(args)
                    .ConfigureLogging(logging =>
                    {
@@ -49,6 +45,9 @@ namespace Receiver
                    .Get<IServerAddressesFeature>()
                    ?.Addresses.FirstOrDefault()
                    ?? throw new InvalidOperationException("Receiver has no listening address.");
+
+               // Certificatul de dezvoltare HTTPS este emis doar pentru "localhost", nu pentru 127.0.0.1.
+               address = address.Replace("127.0.0.1", "localhost");
 
                Console.WriteLine($"Subscriber listening at: {address}");
 
