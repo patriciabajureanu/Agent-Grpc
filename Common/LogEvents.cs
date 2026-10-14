@@ -12,7 +12,7 @@ namespace Common
           public static readonly EventId SubscriberAdded = new(1101, "subscriber.added");
           public static readonly EventId SubscriberRemoved = new(1102, "subscriber.removed");
 
-          public static readonly EventId NewsDelivered = new(1201, "news.delivered");
+          public static readonly EventId NewsNotified = new(1201, "news.notified");
           public static readonly EventId DeliveryFailed = new(1202, "news.delivery_failed");
           public static readonly EventId NewsDeadLettered = new(1203, "news.dead_lettered");
 

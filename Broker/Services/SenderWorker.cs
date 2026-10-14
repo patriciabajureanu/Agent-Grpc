@@ -120,7 +120,7 @@ namespace Broker.Services
                               new Metadata { { ContractConstants.CorrelationIdHeader, news.CorrelationId } },
                               deadline: DateTime.UtcNow.AddSeconds(5),
                               cancellationToken: stoppingToken);
-                         _logger.LogInformation(LogEvents.NewsDelivered, "Subscriber {Subscriber} answered {Result} {Reason} in {DurationMs} ms",
+                         _logger.LogInformation(LogEvents.NewsNotified, "Subscriber {Subscriber} answered {Result} {Reason} in {DurationMs} ms",
                               connection.Address, reply.Status, reply.Reason, stopwatch.ElapsedMilliseconds);
 
                          if (reply.Status == AckStatus.Ack)
