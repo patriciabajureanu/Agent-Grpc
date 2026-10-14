@@ -16,17 +16,17 @@ Aplicatie publish/subscribe prin gRPC, cu patru proiecte:
 
 ## Descarcare si compilare
 
-Versiunea completa cu Receiver se afla pe ramura `feature/receiver`.
+Versiunea completa cu Receiver se afla pe ramura `main`.
 
 ```powershell
-git clone --branch feature/receiver https://github.com/patriciabajureanu/Agent-Grpc.git
+git clone --branch main https://github.com/patriciabajureanu/Agent-Grpc.git
 cd Agent-Grpc
 dotnet restore "Agent Grpc.sln"
 dotnet build "Agent Grpc.sln"
 ```
 
 Pentru o copie existenta, salveaza modificarile proprii inainte de schimbarea
-ramurii, apoi foloseste `git fetch origin`, `git switch feature/receiver` si
+ramurii, apoi foloseste `git fetch origin`, `git switch main` si
 `git pull --ff-only`.
 
 ## Rulare locala
@@ -81,8 +81,8 @@ Pentru oprirea proceselor foloseste Ctrl+C.
 
 ## Colaborare
 
-Creeaza o ramura proprie pornind de la `feature/receiver`, salveaza modificarile
-prin commit si deschide un pull request. Nu adauga `bin/`, `obj/`, `.vs/`,
+Creeaza o ramura proprie pornind de la `main`, salveaza modificarile
+prin commit si deschide un pull request catre `main`. Nu adauga `bin/`, `obj/`, `.vs/`,
 fisiere `*.user` sau secrete; acestea sunt excluse prin `.gitignore`.
 
 Workflow-ul GitHub Actions compileaza solutia in Release la push si pull request,
