@@ -40,6 +40,71 @@ flowchart LR
 | `Receiver` | Se aboneaza la o categorie, expune serviciul `Notifier`, scrie stirile primite in jurnal si le afiseaza. |
 | `Broker.Tests`, `Receiver.Tests` | Teste unitare, de contract, de integrare si pentru scenariile de esec. |
 
+### Cum se citeste diagrama
+
+Diagrama se citeste de la stanga la dreapta. Sender-ul si Receiver-ul nu se
+cunosc: amandoi vorbesc doar cu Broker-ul, care decide cui ajunge fiecare stire,
+dupa categorie (sablonul Publisher/Subscriber).
+
+**Sagetile: apeluri gRPC.** Fiecare sageata cu nume (`PublishMessage`,
+`Subscribe`, `Notify`) este un apel gRPC: o functie apelata pe alt proces ca si
+cum ar fi locala.
+
+- **Contractul.** Functiile si mesajele sunt descrise in fisierele `.proto` din
+  [Common/Protos](Common/Protos). Din ele, `protoc` genereaza clasele C# folosite
+  de toate componentele: clientii (de exemplu `Publisher.PublisherClient`) si
+  clasele de baza ale serverelor (de exemplu `Publisher.PublisherBase`).
+- **Datele.** Circula in **Protobuf**, un format binar compact. Prin retea se
+  trimit numerele campurilor, nu numele lor.
+- **Transportul.** **HTTP/2** peste **TLS** (HTTPS), deci peste TCP. HTTP/2
+  permite mai multe apeluri simultane pe aceeasi conexiune. Broker-ul pastreaza
+  cate un `GrpcChannel` deschis catre fiecare abonat
+  ([Connection.cs](Broker/Models/Connection.cs)).
+- **Limitele unui apel.** Fiecare apel are un deadline de 5 s. Erorile sunt coduri
+  gRPC standard (`INVALID_ARGUMENT`, `UNAVAILABLE` ...).
+
+**In Broker (dreptunghiul galben).** Fiecare componenta are un singur rol:
+
+| Componenta | Ce face | Notiunea aplicata | Unde |
+|---|---|---|---|
+| **PublisherService** | Primeste `PublishMessage`, valideaza stirea, o adauga in MessageStorage si raspunde la `GetNewsStatus`. | Serviciu gRPC: extinde clasa generata `Publisher.PublisherBase`. Validare: erorile devin `RpcException` cu cod gRPC. | [PublisherService.cs](Broker/Services/PublisherService.cs) |
+| **MessageStorage** | Pastreaza stirile si starea lor (`Pending`, `Delivered`, `DeadLettered`). | `ConcurrentQueue<StoredNews>`: coada thread-safe care da ordinea de livrare. `ConcurrentDictionary<string, StoredNews>`: toate stirile dupa `message_id`. `GetOrAdd` adauga atomic, deci acelasi id nu intra de doua ori (idempotenta). | [MessageStorageService.cs](Broker/Services/MessageStorageService.cs) |
+| **SubscriberService** | Primeste `Subscribe` si verifica faptul ca adresa Receiver-ului este HTTPS. | Serviciu gRPC: `Subscriber.SubscriberBase`. | [SubscriberService.cs](Broker/Services/SubscriberService.cs) |
+| **ConnectionStorage** | Lista abonatilor, fiecare cu categoria lui; de aici se face rutarea. | `List<Connection>` protejata cu `lock`, pentru ca `List` nu este thread-safe. | [ConnectionStorageService.cs](Broker/Services/ConnectionStorageService.cs) |
+| **SenderWorker** | La fiecare 2 s ia stirile din coada, gaseste abonatii categoriei si apeleaza `Notify`. La ACK, stirea devine `Delivered`. La NACK sau eroare, reincearca dupa backoff exponential cu jitter. Dupa 5 incercari, stirea ajunge in `dead-letter.jsonl`. | `BackgroundService` (worker de fundal) cu `PeriodicTimer`. Apeluri asincrone (`async`/`await`), cu deadline. | [SenderWorker.cs](Broker/Services/SenderWorker.cs), [RetryPolicy.cs](Common/RetryPolicy.cs) |
+| **PersistenceWorker** | La fiecare 5 s salveaza stirile persistente nelivrate in `news-backup.json` si le restaureaza la pornire. | `BackgroundService`. Scriere sigura: fisier temporar, apoi mutare peste backup. Formatul este Protobuf JSON (`JsonFormatter`). | [PersistenceWorker.cs](Broker/Services/PersistenceWorker.cs) |
+
+**Concurenta.** Kestrel, serverul web din ASP.NET Core, trateaza fiecare apel
+asincron, pe un thread pool. Mai multi Sender-i si Receiver-i lucreaza simultan
+cu aceleasi date. De aceea stocarea foloseste colectii thread-safe
+(`ConcurrentQueue`, `ConcurrentDictionary`) si `lock`. Livrarea si backup-ul
+ruleaza separat, in worker-i de fundal, deci nu blocheaza raspunsul la publicare.
+
+**Receiver-ii (dreapta).** Fiecare Receiver este si client, si server gRPC:
+- ca **client**, apeleaza `Subscribe` (linia punctata);
+- ca **server**, implementeaza `Notify`, apelat de Broker
+  ([NotificationService.cs](Receiver/Services/NotificationService.cs)).
+
+Inainte de ACK, Receiver-ul scrie stirea in jurnalul lui, `received-<categorie>.jsonl`
+([NewsJournal.cs](Receiver/Services/NewsJournal.cs)). Fisierul este in format JSON
+Lines: cate o stire pe fiecare linie. Daca aceeasi stire este livrata din nou (de
+exemplu dupa o cadere inainte de ACK), Receiver-ul o recunoaste dupa `message_id`.
+Raspunde ACK fara sa o proceseze a doua oara.
+
+**Fisierele (cilindrii).** Toate sunt JSON, nu o baza de date:
+
+| Fisier | Format | Continut |
+|---|---|---|
+| `news-backup.json` | un document JSON | stirile persistente nelivrate si numarul lor de incercari |
+| `dead-letter.jsonl` | JSON Lines | stirile care nu au putut fi livrate, cu motivul |
+| `received-<categorie>.jsonl` | JSON Lines | stirile procesate de un Receiver |
+
+Structura lor este descrisa tot in `.proto`:
+[broker_storage.proto](Common/Protos/broker_storage.proto) pentru backup si
+dead-letter, [news.proto](Common/Protos/news.proto) pentru jurnal. Prin retea
+stirile circula in Protobuf binar; pe disc se scriu in formatul JSON al Protobuf,
+ca sa poata fi citite de om.
+
 ### Fluxul unei stiri
 
 ```mermaid
