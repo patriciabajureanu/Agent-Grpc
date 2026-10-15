@@ -4,11 +4,12 @@
 #   certs/<nume>.pfx  - folosit de Broker sau Receiver pe acest calculator (contine cheia privata, nu il trimite nimanui)
 #   certs/<nume>.cer  - partea publica, de trimis celuilalt calculator pentru a fi marcata ca de incredere
 #
-# Exemplu: powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress 172.20.10.3 -Name broker
+# Exemplu: powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress 172.20.10.3 -Name broker -Password $env:CERT_PASSWORD
 param(
      [Parameter(Mandatory = $true)][string]$IpAddress,
      [Parameter(Mandatory = $true)][string]$Name,
-     [string]$Password = "agent-grpc"
+     # Parola fisierului .pfx; o alegi tu si nu se pastreaza in repository.
+     [Parameter(Mandatory = $true)][string]$Password
 )
 
 # Oricare eroare opreste scriptul, ca sa nu ramana un certificat incomplet.

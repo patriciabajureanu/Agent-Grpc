@@ -249,13 +249,15 @@ Receiver. Ambele sunt in aceeasi retea; `IP_A` si `IP_B` sunt adresele lor
 (`ipconfig`). Certificatul de dezvoltare este valabil doar pentru `localhost`,
 deci fiecare calculator foloseste un certificat creat pentru IP-ul lui.
 
-1. Certificatele (in directorul repository-ului):
+1. Certificatele (in directorul repository-ului). Parola fisierului `.pfx` o
+   alegi tu; nu se scrie in cod si nu se pune in repository:
 
    ```powershell
+   $env:CERT_PASSWORD = Read-Host "Parola certificatului"
    # pe A
-   powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress IP_A -Name broker
+   powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress IP_A -Name broker -Password $env:CERT_PASSWORD
    # pe B
-   powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress IP_B -Name receiver
+   powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress IP_B -Name receiver -Password $env:CERT_PASSWORD
    ```
 
    Copiaza `certs\broker.cer` pe B si `certs\receiver.cer` pe A. Pe A se
@@ -277,7 +279,7 @@ deci fiecare calculator foloseste un certificat creat pentru IP-ul lui.
    ```powershell
    $env:BROKER_ADDRESS = "https://0.0.0.0:5001"
    $env:Kestrel__Certificates__Default__Path = "$PWD\certs\broker.pfx"
-   $env:Kestrel__Certificates__Default__Password = "agent-grpc"
+   $env:Kestrel__Certificates__Default__Password = $env:CERT_PASSWORD
    dotnet run --project Broker --no-launch-profile
    ```
 
@@ -290,7 +292,7 @@ deci fiecare calculator foloseste un certificat creat pentru IP-ul lui.
    $env:RECEIVER_URLS = "https://0.0.0.0:5002"
    $env:RECEIVER_PUBLIC_ADDRESS = "https://IP_B:5002"
    $env:Kestrel__Certificates__Default__Path = "$PWD\certs\receiver.pfx"
-   $env:Kestrel__Certificates__Default__Password = "agent-grpc"
+   $env:Kestrel__Certificates__Default__Password = $env:CERT_PASSWORD
    dotnet run --project Receiver --no-launch-profile
    ```
 
