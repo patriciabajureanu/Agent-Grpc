@@ -174,6 +174,61 @@ Trei terminale, in directorul repository-ului, pornite in ordinea urmatoare:
 Scenariile de esec (Broker oprit fortat, consumator care esueaza, raspuns
 pierdut) se reproduc dupa pasii din [docs/failure-scenarios.md](docs/failure-scenarios.md).
 
+## Rulare pe doua calculatoare
+
+Exemplu: calculatorul A ruleaza Broker si Sender, calculatorul B ruleaza
+Receiver. Ambele sunt in aceeasi retea; `IP_A` si `IP_B` sunt adresele lor
+(`ipconfig`). Certificatul de dezvoltare este valabil doar pentru `localhost`,
+deci fiecare calculator foloseste un certificat creat pentru IP-ul lui.
+
+1. Certificatele (in directorul repository-ului):
+
+   ```powershell
+   # pe A
+   powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress IP_A -Name broker
+   # pe B
+   powershell -ExecutionPolicy Bypass -File scripts\New-LanCertificate.ps1 -IpAddress IP_B -Name receiver
+   ```
+
+   Copiaza `certs\broker.cer` pe B si `certs\receiver.cer` pe A. Pe A se
+   importa `broker.cer` si `receiver.cer`, pe B doar `broker.cer`
+   (Windows cere confirmare):
+
+   ```powershell
+   Import-Certificate -FilePath certs\broker.cer -CertStoreLocation Cert:\CurrentUser\Root
+   ```
+
+2. Firewall (PowerShell ca Administrator): pe A portul 5001, pe B portul 5002.
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Agent-Grpc" -Direction Inbound -Protocol TCP -LocalPort 5001 -Action Allow
+   ```
+
+3. Pe A, Broker-ul (asculta pe toate interfetele):
+
+   ```powershell
+   $env:BROKER_ADDRESS = "https://0.0.0.0:5001"
+   $env:Kestrel__Certificates__Default__Path = "$PWD\certs\broker.pfx"
+   $env:Kestrel__Certificates__Default__Password = "agent-grpc"
+   dotnet run --project Broker --no-launch-profile
+   ```
+
+   Verificare de pe B: `https://IP_A:5001/health/ready` raspunde `Healthy`.
+
+4. Pe B, Receiver-ul:
+
+   ```powershell
+   $env:BROKER_ADDRESS = "https://IP_A:5001"
+   $env:RECEIVER_URLS = "https://0.0.0.0:5002"
+   $env:RECEIVER_PUBLIC_ADDRESS = "https://IP_B:5002"
+   $env:Kestrel__Certificates__Default__Path = "$PWD\certs\receiver.pfx"
+   $env:Kestrel__Certificates__Default__Password = "agent-grpc"
+   dotnet run --project Receiver --no-launch-profile
+   ```
+
+5. Pe A, Sender-ul se conecteaza local, ca de obicei:
+   `dotnet run --project Sender 2> sender.log`.
+
 ## Configurare
 
 Valorile implicite sunt in `Broker/appsettings.json`. `dotnet run --project` porneste procesul

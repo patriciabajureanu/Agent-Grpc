@@ -42,7 +42,8 @@ namespace Receiver
                    })
                    .ConfigureServices(services => services.AddSingleton(journal))
                    .UseStartup<Startup>()
-                   .UseUrls(EndpointsConstants.SubscribersAddress)
+                   // RECEIVER_URLS=https://0.0.0.0:5002 il face accesibil din retea (pentru Broker pe alt calculator).
+                   .UseUrls(Environment.GetEnvironmentVariable("RECEIVER_URLS") ?? EndpointsConstants.SubscribersAddress)
                    .Build();
 
                host.Start();
@@ -66,8 +67,9 @@ namespace Receiver
                    ?.Addresses.FirstOrDefault()
                    ?? throw new InvalidOperationException("Receiver has no listening address.");
 
-               // Certificatul de dezvoltare HTTPS este emis doar pentru "localhost", nu pentru 127.0.0.1.
-               address = address.Replace("127.0.0.1", "localhost");
+               // Adresa la care Broker-ul il apeleaza: RECEIVER_PUBLIC_ADDRESS cand Broker-ul e pe alt calculator,
+               // altfel "localhost", pentru ca certificatul de dezvoltare este emis doar pentru localhost.
+               address = Environment.GetEnvironmentVariable("RECEIVER_PUBLIC_ADDRESS") ?? address.Replace("127.0.0.1", "localhost");
 
                Console.WriteLine($"Subscriber listening at: {address}");
 

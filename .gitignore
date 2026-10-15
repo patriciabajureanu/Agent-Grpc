@@ -17,3 +17,6 @@ obj/
 news-backup.json*
 dead-letter.jsonl
 received-*.jsonl
+
+# Certificatele pentru rularea pe doua calculatoare (contin chei private)
+certs/
