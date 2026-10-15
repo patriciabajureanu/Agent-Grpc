@@ -14,18 +14,21 @@ inainte de confirmare si mesaje care nu pot fi procesate.
 
 ```mermaid
 flowchart LR
-    S[Sender<br/>consola] -- "Publisher.PublishMessage<br/>GetNewsStatus" --> B
-    R1[Receiver sport] -- Subscriber.Subscribe --> B
-    R2[Receiver tech] -- Subscriber.Subscribe --> B
+    S[Sender<br/>consola] -- "PublishMessage<br/>GetNewsStatus" --> P
     subgraph B[Broker]
+        direction TB
         P[PublisherService<br/>validare + deduplicare] --> Q[(MessageStorage<br/>coada + stari)]
-        W[SenderWorker<br/>livrare, retry, dead-letter] --> Q
-        PW[PersistenceWorker<br/>backup / restaurare] --> Q
+        SS[SubscriberService] --> C[(ConnectionStorage<br/>abonati pe categorii)]
+        Q --> W[SenderWorker<br/>livrare, retry, dead-letter]
+        C --> W
+        PW[PersistenceWorker<br/>backup / restaurare] <--> Q
     end
-    W -- "Notifier.Notify<br/>ACK / NACK" --> R1
-    W -- "Notifier.Notify" --> R2
     PW <--> F1[(news-backup.json)]
     W --> F2[(dead-letter.jsonl)]
+    W -- "Notify<br/>ACK / NACK" --> R1[Receiver sport]
+    W -- Notify --> R2[Receiver tech]
+    R1 -. Subscribe .-> SS
+    R2 -. Subscribe .-> SS
     R1 --> J1[(received-sport.jsonl)]
 ```
 
@@ -47,7 +50,7 @@ sequenceDiagram
     S->>B: PublishMessage(news, message_id, correlation_id)
     B-->>S: OK (message_id, duplicate=false)
     Note over S,B: raspuns pierdut -> Sender repeta cu acelasi message_id -> duplicate=true
-    loop la fiecare 2 s, pana la ACK
+    loop SenderWorker verifica la fiecare 2 s, dupa un esec asteapta backoff-ul, pana la ACK sau dead-letter
         B->>R: Notify(news) + header x-correlation-id
         R->>R: scrie stirea in jurnal (efect + deduplicare)
         R-->>B: ACK / NACK_RETRY / NACK_REJECT
