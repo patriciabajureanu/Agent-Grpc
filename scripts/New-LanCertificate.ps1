@@ -11,7 +11,13 @@ param(
      [string]$Password = "agent-grpc"
 )
 
-$ip = [System.Net.IPAddress]::Parse($IpAddress)
+# Oricare eroare opreste scriptul, ca sa nu ramana un certificat incomplet.
+$ErrorActionPreference = "Stop"
+
+$ip = $null
+if (-not [System.Net.IPAddress]::TryParse($IpAddress, [ref]$ip)) {
+     throw "'$IpAddress' nu este o adresa IP. Foloseste IP-ul din ipconfig, de exemplu 172.20.10.4."
+}
 $key = [System.Security.Cryptography.RSA]::Create(2048)
 $request = New-Object System.Security.Cryptography.X509Certificates.CertificateRequest(
      "CN=$IpAddress", $key, [System.Security.Cryptography.HashAlgorithmName]::SHA256,
